@@ -709,6 +709,9 @@ export function registerTheme(program) {
             radius: themeDef.radius,
             tokens: themeDef.tokens,
             components: themeDef.components,
+            syntax: themeDef.syntax,
+            onDark: themeDef.onDark,
+            onLight: themeDef.onLight,
           });
         }
         const scopeSelector = themeScopeStart(themeDef.name);
@@ -726,9 +729,29 @@ export function registerTheme(program) {
             `@layer reset {\n@scope (${scopeSelector}) to (${scopeTo}) {\n${proseInner}\n}\n}`,
           );
         }
+        // Component overrides and on-media rules (MediaTheme dark/light
+        // surface overrides) share ONE @layer astryx-theme block, exactly
+        // like the runtime's generateThemeCSS merges them into a single
+        // component chunk. Merging also lets the light-dark() check below
+        // see every rule that ships in this layer — on-media token values
+        // pass through verbatim (and [light, dark] tuples compile to
+        // light-dark()), so scanning only the component scope would miss
+        // themes whose light-dark() usage lives in onDark/onLight.
+        const themeLayerChunks = [];
         if (component.length > 0) {
           const componentInner = component.join('\n\n');
-          const componentScope = `@scope (${scopeSelector}) to (${scopeTo}) {\n${componentInner}\n}`;
+          themeLayerChunks.push(
+            `@scope (${scopeSelector}) to (${scopeTo}) {\n${componentInner}\n}`,
+          );
+        }
+        if (_generateOnMediaCSS) {
+          const onMediaCss = _generateOnMediaCSS(resolvedTheme);
+          if (onMediaCss) {
+            themeLayerChunks.push(onMediaCss);
+          }
+        }
+        if (themeLayerChunks.length > 0) {
+          const themeLayerInner = themeLayerChunks.join('\n\n');
           // light-dark() requires color-scheme in the same bundle so CSS
           // tooling (e.g. LightningCSS's polyfill) initializes its toggle
           // vars. The bare :root alone would override reset.css's
@@ -736,21 +759,14 @@ export function registerTheme(program) {
           // reset), silently breaking forced <Theme mode="light|dark"> at
           // the root — so mirror that mapping here with real specificity:
           // html[data-theme] (0,1,1) beats :root (0,1,0) within this layer.
-          const colorSchemeDecl = componentScope.includes('light-dark(')
+          const colorSchemeDecl = themeLayerInner.includes('light-dark(')
             ? '  :root { color-scheme: light dark; }\n' +
               '  html[data-theme="light"] { color-scheme: light; }\n' +
               '  html[data-theme="dark"] { color-scheme: dark; }\n\n'
             : '';
           cssParts.push(
-            `@layer astryx-theme {\n${colorSchemeDecl}${componentScope}\n}`,
+            `@layer astryx-theme {\n${colorSchemeDecl}${themeLayerInner}\n}`,
           );
-        }
-        // On-media rules (MediaTheme dark/light surface overrides)
-        if (_generateOnMediaCSS) {
-          const onMediaCss = _generateOnMediaCSS(resolvedTheme);
-          if (onMediaCss) {
-            cssParts.push(`@layer astryx-theme {\n${onMediaCss}\n}`);
-          }
         }
         if (cssParts.length === 0) {
           if (!json) humanLog('No overrides found — nothing to build.');

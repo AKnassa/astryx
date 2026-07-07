@@ -55,22 +55,26 @@ function runCli(args, cwd) {
   }
 }
 
-function writeTheme(dir, name, tokens) {
+function writeTheme(dir, name, themeFields) {
   fs.mkdirSync(dir, {recursive: true});
   // The CLI writes <basename>.css next to the source file, so use the
   // theme name as the filename for unambiguous fixtures.
   const file = path.join(dir, `${name}.mjs`);
   fs.writeFileSync(
     file,
-    `export default { name: ${JSON.stringify(name)}, tokens: ${JSON.stringify(tokens)} };\n`,
+    `export default { name: ${JSON.stringify(name)}, ${Object.entries(
+      themeFields,
+    )
+      .map(([k, v]) => `${JSON.stringify(k)}: ${JSON.stringify(v)}`)
+      .join(', ')} };\n`,
   );
   return file;
 }
 
-function buildTheme(tmpDir, name, tokens) {
+function buildTheme(tmpDir, name, themeFields) {
   const project = path.join(tmpDir, 'project');
   const themesDir = path.join(project, 'themes');
-  const themeFile = writeTheme(themesDir, name, tokens);
+  const themeFile = writeTheme(themesDir, name, themeFields);
 
   const result = runCli(
     ['theme', 'build', path.relative(project, themeFile)],
@@ -106,7 +110,7 @@ afterEach(() => {
 describe('theme build color-scheme output', () => {
   it('emits mode-aware color-scheme rules for light-dark() themes', () => {
     const css = buildTheme(tmpDir, 'with-ld', {
-      '--color-bg': 'light-dark(#fff, #000)',
+      tokens: {'--color-bg': 'light-dark(#fff, #000)'},
     });
 
     // Bare :root stays for tooling (LightningCSS light-dark() polyfill).
@@ -136,8 +140,44 @@ describe('theme build color-scheme output', () => {
     );
   });
 
-  it('emits no color-scheme rules for themes without light-dark()', () => {
-    const css = buildTheme(tmpDir, 'no-ld', {'--color-bg': '#fff'});
-    expect(css).not.toContain('color-scheme');
+  it('detects light-dark() that only appears in on-media rules', () => {
+    // Mirrors what jiti hands the CLI for a defineTheme() file using
+    // onDark: a resolved theme carrying __onDark. [light, dark] tuple
+    // tokens compile to light-dark() in the on-media block ONLY — the
+    // component scope has none, so scanning it alone misses this theme.
+    const css = buildTheme(tmpDir, 'onmedia-ld', {
+      tokens: {'--color-bg': '#fff'},
+      __onDark: {tokens: {'--color-accent': 'light-dark(#036, #9cf)'}},
+    });
+
+    expect(css).toMatch(/:root\s*\{\s*color-scheme:\s*light dark;\s*\}/);
+    expect(css).toMatch(
+      /html\[data-theme="dark"\]\s*\{\s*color-scheme:\s*dark;\s*\}/,
+    );
+  });
+
+  it('merges component and on-media rules into one @layer astryx-theme block', () => {
+    // Runtime parity: generateThemeCSS injects component + on-media rules
+    // as a single astryx-theme chunk, so the build must emit one block too.
+    const css = buildTheme(tmpDir, 'merged', {
+      tokens: {'--color-bg': 'light-dark(#fff, #000)'},
+      __onDark: {tokens: {'--color-accent': '#9cf'}},
+    });
+
+    const occurrences = css.split('@layer astryx-theme').length - 1;
+    expect(occurrences).toBe(1);
+    // On-media rules land inside that single block, after the component scope.
+    expect(css.indexOf('[data-astryx-media="dark"]')).toBeGreaterThan(
+      css.indexOf('@layer astryx-theme'),
+    );
+  });
+
+  it('emits no root color-scheme rules for themes without light-dark()', () => {
+    const css = buildTheme(tmpDir, 'no-ld', {tokens: {'--color-bg': '#fff'}});
+    // No forced-mode mapping and no bare :root declaration. (Scoped
+    // [data-astryx-media] rules may legitimately set color-scheme for
+    // on-media surfaces — that mapping is unrelated to the root one.)
+    expect(css).not.toContain(':root { color-scheme:');
+    expect(css).not.toContain('html[data-theme');
   });
 });
