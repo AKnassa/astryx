@@ -729,8 +729,17 @@ export function registerTheme(program) {
         if (component.length > 0) {
           const componentInner = component.join('\n\n');
           const componentScope = `@scope (${scopeSelector}) to (${scopeTo}) {\n${componentInner}\n}`;
+          // light-dark() requires color-scheme in the same bundle so CSS
+          // tooling (e.g. LightningCSS's polyfill) initializes its toggle
+          // vars. The bare :root alone would override reset.css's
+          // :where(html[data-theme]) mapping (astryx-theme layers above
+          // reset), silently breaking forced <Theme mode="light|dark"> at
+          // the root — so mirror that mapping here with real specificity:
+          // html[data-theme] (0,1,1) beats :root (0,1,0) within this layer.
           const colorSchemeDecl = componentScope.includes('light-dark(')
-            ? '  :root { color-scheme: light dark; }\n\n'
+            ? '  :root { color-scheme: light dark; }\n' +
+              '  html[data-theme="light"] { color-scheme: light; }\n' +
+              '  html[data-theme="dark"] { color-scheme: dark; }\n\n'
             : '';
           cssParts.push(
             `@layer astryx-theme {\n${colorSchemeDecl}${componentScope}\n}`,
