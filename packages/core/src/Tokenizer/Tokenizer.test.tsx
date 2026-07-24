@@ -9,6 +9,7 @@
  * SYNC: When Tokenizer.tsx changes, update tests to match
  */
 
+import {useState} from 'react';
 import {describe, it, expect, vi, beforeAll, afterAll, afterEach} from 'vitest';
 import {render, screen, fireEvent, act, waitFor} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -746,6 +747,434 @@ describe('Tokenizer', () => {
       // "Alice" exactly matches a result — no Create option
       expect(screen.getByText('Alice')).toBeInTheDocument();
       expect(screen.queryByText('Create "Alice"')).not.toBeInTheDocument();
+    });
+  });
+
+  describe('delimiters', () => {
+    const emptySource: SearchSource = {
+      search: () => [],
+      bootstrap: () => [],
+    };
+
+    // Controlled harness: mirrors real usage so multi-commit sequences see the
+    // updated value between commits.
+    function StatefulTokenizer(props: {
+      initial?: SearchableItem[];
+      onChange?: (items: SearchableItem[], change: unknown) => void;
+      hasCreate?: boolean;
+      delimiters?: ReadonlyArray<string> | RegExp;
+      maxEntries?: number;
+      searchSource?: SearchSource;
+    }) {
+      const [value, setValue] = useState<SearchableItem[]>(props.initial ?? []);
+      return (
+        <Tokenizer
+          label="Tags"
+          searchSource={props.searchSource ?? emptySource}
+          value={value}
+          onChange={(items, change) => {
+            setValue(items);
+            props.onChange?.(items, change);
+          }}
+          hasCreate={props.hasCreate ?? true}
+          delimiters={props.delimiters}
+          maxEntries={props.maxEntries}
+          debounceMs={0}
+        />
+      );
+    }
+
+    it('commits one token and clears the input when a delimiter is typed', async () => {
+      const onChange = vi.fn();
+      render(
+        <Tokenizer
+          label="Tags"
+          searchSource={emptySource}
+          value={[]}
+          onChange={onChange}
+          hasCreate
+          debounceMs={0}
+        />,
+      );
+      const input = screen.getByRole('combobox');
+      await act(async () => {
+        fireEvent.change(input, {target: {value: 'alice,'}});
+      });
+      expect(onChange).toHaveBeenCalledTimes(1);
+      expect(onChange).toHaveBeenCalledWith([{id: 'alice', label: 'alice'}], {
+        item: {id: 'alice', label: 'alice'},
+        type: 'create',
+      });
+      expect(input).toHaveValue('');
+    });
+
+    it('continues fresh — a second delimited value commits a second token', async () => {
+      const onChange = vi.fn();
+      render(<StatefulTokenizer onChange={onChange} />);
+      const input = screen.getByRole('combobox');
+      await act(async () => {
+        fireEvent.change(input, {target: {value: 'alice,'}});
+      });
+      await act(async () => {
+        fireEvent.change(input, {target: {value: 'bob,'}});
+      });
+      expect(onChange).toHaveBeenCalledTimes(2);
+      expect(screen.getByText('alice')).toBeInTheDocument();
+      expect(screen.getByText('bob')).toBeInTheDocument();
+      expect(input).toHaveValue('');
+    });
+
+    it('pasting delimited text creates one token per value', async () => {
+      const user = userEvent.setup();
+      const onChange = vi.fn();
+      render(
+        <Tokenizer
+          label="Tags"
+          searchSource={emptySource}
+          value={[]}
+          onChange={onChange}
+          hasCreate
+          debounceMs={0}
+        />,
+      );
+      const input = screen.getByRole('combobox');
+      await user.click(input);
+      await user.paste('a@x.com, b@y.com, c@z.com');
+      // Exactly one onChange, carrying all three created items.
+      expect(onChange).toHaveBeenCalledTimes(1);
+      const [items, change] = onChange.mock.calls[0];
+      expect(items.map((i: SearchableItem) => i.label)).toEqual([
+        'a@x.com',
+        'b@y.com',
+        'c@z.com',
+      ]);
+      expect(change.type).toBe('create');
+      expect(change.item.label).toBe('c@z.com');
+      expect(change.items.map((i: SearchableItem) => i.label)).toEqual([
+        'a@x.com',
+        'b@y.com',
+        'c@z.com',
+      ]);
+      expect(input).toHaveValue('');
+    });
+
+    it('trims pasted values and drops empty segments', async () => {
+      const user = userEvent.setup();
+      const onChange = vi.fn();
+      render(
+        <Tokenizer
+          label="Tags"
+          searchSource={emptySource}
+          value={[]}
+          onChange={onChange}
+          hasCreate
+          debounceMs={0}
+        />,
+      );
+      const input = screen.getByRole('combobox');
+      await user.click(input);
+      await user.paste('a,,  b  ,');
+      const [items] = onChange.mock.calls[0];
+      expect(items.map((i: SearchableItem) => i.label)).toEqual(['a', 'b']);
+    });
+
+    it('drops duplicates within a batch and against existing tokens', async () => {
+      const user = userEvent.setup();
+      const onChange = vi.fn();
+      render(
+        <Tokenizer
+          label="Tags"
+          searchSource={emptySource}
+          value={[{id: 'a', label: 'a'}]}
+          onChange={onChange}
+          hasCreate
+          debounceMs={0}
+        />,
+      );
+      const input = screen.getByRole('combobox');
+      await user.click(input);
+      await user.paste('a, b, b, c');
+      const [items] = onChange.mock.calls[0];
+      // 'a' already selected, second 'b' is an in-batch dupe.
+      expect(items.map((i: SearchableItem) => i.label)).toEqual([
+        'a',
+        'b',
+        'c',
+      ]);
+    });
+
+    it('respects maxEntries, dropping the overflow', async () => {
+      const user = userEvent.setup();
+      const onChange = vi.fn();
+      render(
+        <Tokenizer
+          label="Tags"
+          searchSource={emptySource}
+          value={[]}
+          onChange={onChange}
+          hasCreate
+          maxEntries={2}
+          debounceMs={0}
+        />,
+      );
+      const input = screen.getByRole('combobox');
+      await user.click(input);
+      await user.paste('a, b, c, d');
+      const [items] = onChange.mock.calls[0];
+      expect(items.map((i: SearchableItem) => i.label)).toEqual(['a', 'b']);
+    });
+
+    it('handles a CRLF paste (Windows/Excel list)', async () => {
+      const user = userEvent.setup();
+      const onChange = vi.fn();
+      render(
+        <Tokenizer
+          label="Tags"
+          searchSource={emptySource}
+          value={[]}
+          onChange={onChange}
+          hasCreate
+          debounceMs={0}
+        />,
+      );
+      const input = screen.getByRole('combobox');
+      await user.click(input);
+      await user.paste('a\r\nb\r\nc');
+      const [items] = onChange.mock.calls[0];
+      expect(items.map((i: SearchableItem) => i.label)).toEqual([
+        'a',
+        'b',
+        'c',
+      ]);
+    });
+
+    it('leaves the input empty after pasting into an already-empty input', async () => {
+      // Guards the React controlled-state restore: setQuery('') is a no-op
+      // write when the query is already '', so only React's restore clears the
+      // DOM node. A token-count assertion alone would not catch this.
+      const user = userEvent.setup();
+      render(
+        <Tokenizer
+          label="Tags"
+          searchSource={emptySource}
+          value={[]}
+          onChange={() => {}}
+          hasCreate
+          debounceMs={0}
+        />,
+      );
+      const input = screen.getByRole('combobox');
+      await user.click(input);
+      await user.paste('a, b');
+      expect(input).toHaveValue('');
+    });
+
+    it('creates tokens on a repeated identical paste', async () => {
+      // Catches React's input value tracker falling out of sync with the
+      // restored DOM value: the second identical paste must still fire.
+      const onChange = vi.fn();
+      const user = userEvent.setup();
+      render(<StatefulTokenizer onChange={onChange} />);
+      const input = screen.getByRole('combobox');
+      await user.click(input);
+      await user.paste('x, y');
+      await user.paste('x, y');
+      // Second paste's values are all dupes of the first, so no NEW tokens —
+      // but the transform must still run (returning ''), i.e. onChange fires
+      // for the first paste and the input clears both times.
+      expect(onChange).toHaveBeenCalledTimes(1);
+      expect(input).toHaveValue('');
+    });
+
+    it('a single value with no delimiter still offers Create (unchanged)', async () => {
+      const user = userEvent.setup();
+      render(
+        <Tokenizer
+          label="Tags"
+          searchSource={emptySource}
+          value={[]}
+          onChange={() => {}}
+          hasCreate
+          debounceMs={0}
+        />,
+      );
+      const input = screen.getByRole('combobox');
+      await user.click(input);
+      await user.paste('NewTag');
+      await act(async () => {
+        await new Promise(r => setTimeout(r, 50));
+      });
+      expect(screen.getByText('Create "NewTag"')).toBeInTheDocument();
+      expect(input).toHaveValue('NewTag');
+    });
+
+    it('is inert when delimiters is an empty list', async () => {
+      const user = userEvent.setup();
+      const onChange = vi.fn();
+      render(
+        <Tokenizer
+          label="Tags"
+          searchSource={emptySource}
+          value={[]}
+          onChange={onChange}
+          hasCreate
+          delimiters={[]}
+          debounceMs={0}
+        />,
+      );
+      const input = screen.getByRole('combobox');
+      await user.click(input);
+      await user.paste('a, b');
+      await act(async () => {
+        await new Promise(r => setTimeout(r, 50));
+      });
+      // No split: the whole string stays in the input as one prospective value.
+      expect(onChange).not.toHaveBeenCalled();
+      expect(input).toHaveValue('a, b');
+    });
+
+    it('is inert when hasCreate is off', async () => {
+      const user = userEvent.setup();
+      const onChange = vi.fn();
+      render(
+        <Tokenizer
+          label="Members"
+          searchSource={userSource}
+          value={[]}
+          onChange={onChange}
+          debounceMs={0}
+        />,
+      );
+      const input = screen.getByRole('combobox');
+      await user.click(input);
+      await user.paste('a, b');
+      await act(async () => {
+        await new Promise(r => setTimeout(r, 50));
+      });
+      expect(onChange).not.toHaveBeenCalled();
+      expect(input).toHaveValue('a, b');
+    });
+
+    it('escapes a regex-metacharacter delimiter (splits only on dots)', async () => {
+      const user = userEvent.setup();
+      const onChange = vi.fn();
+      render(
+        <Tokenizer
+          label="Tags"
+          searchSource={emptySource}
+          value={[]}
+          onChange={onChange}
+          hasCreate
+          delimiters={['.']}
+          debounceMs={0}
+        />,
+      );
+      const input = screen.getByRole('combobox');
+      await user.click(input);
+      await user.paste('a.b.c');
+      const [items] = onChange.mock.calls[0];
+      expect(items.map((i: SearchableItem) => i.label)).toEqual([
+        'a',
+        'b',
+        'c',
+      ]);
+    });
+
+    it('accepts a RegExp and never mints the delimiter as a token', async () => {
+      const user = userEvent.setup();
+      const onChange = vi.fn();
+      render(
+        <Tokenizer
+          label="Tags"
+          searchSource={emptySource}
+          value={[]}
+          onChange={onChange}
+          hasCreate
+          delimiters={/(,|;)/}
+          debounceMs={0}
+        />,
+      );
+      const input = screen.getByRole('combobox');
+      await user.click(input);
+      await user.paste('a,b;c');
+      const [items] = onChange.mock.calls[0];
+      expect(items.map((i: SearchableItem) => i.label)).toEqual([
+        'a',
+        'b',
+        'c',
+      ]);
+    });
+
+    it('still creates a comma-containing token when a value is typed then Entered', async () => {
+      // Enter-to-create coexists with delimiter-to-create. With delimiters off
+      // (or no delimiter present), Enter still commits the whole text.
+      const onChange = vi.fn();
+      render(
+        <Tokenizer
+          label="Tags"
+          searchSource={emptySource}
+          value={[]}
+          onChange={onChange}
+          hasCreate
+          delimiters={[]}
+          debounceMs={0}
+        />,
+      );
+      const input = screen.getByRole('combobox');
+      await act(async () => {
+        fireEvent.change(input, {target: {value: 'Smith, John'}});
+      });
+      await act(async () => {
+        await new Promise(r => setTimeout(r, 50));
+      });
+      const createOption = screen.getByText('Create "Smith, John"');
+      await act(async () => {
+        fireEvent.click(createOption);
+      });
+      expect(onChange).toHaveBeenCalledWith(
+        [{id: 'Smith, John', label: 'Smith, John'}],
+        {item: {id: 'Smith, John', label: 'Smith, John'}, type: 'create'},
+      );
+    });
+
+    it('announces a single-value commit with the existing string', async () => {
+      render(
+        <Tokenizer
+          label="Tags"
+          searchSource={emptySource}
+          value={[]}
+          onChange={() => {}}
+          hasCreate
+          debounceMs={0}
+        />,
+      );
+      const input = screen.getByRole('combobox');
+      await act(async () => {
+        fireEvent.change(input, {target: {value: 'alice,'}});
+      });
+      await waitFor(() => {
+        expect(politeRegion()).toHaveTextContent('Added alice');
+      });
+    });
+
+    it('announces a multi-value paste as a batch', async () => {
+      const user = userEvent.setup();
+      render(
+        <Tokenizer
+          label="Tags"
+          searchSource={emptySource}
+          value={[]}
+          onChange={() => {}}
+          hasCreate
+          debounceMs={0}
+        />,
+      );
+      const input = screen.getByRole('combobox');
+      await user.click(input);
+      await user.paste('a, b, c');
+      await waitFor(() => {
+        expect(politeRegion()).toHaveTextContent('Added 3 items');
+      });
     });
   });
 

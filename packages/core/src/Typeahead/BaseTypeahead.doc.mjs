@@ -100,6 +100,11 @@ export const docs = {
       description: 'Additional keydown handler called before internal keyboard navigation. Call e.preventDefault() to skip internal handling.',
     },
     {
+      name: 'transformQuery',
+      type: '(nextQuery: string) => string',
+      description: 'Rewrites edited input text before it becomes the query. Called with the value the input is about to take; the return value is used instead. Runs before the query is stored, before onChangeQuery, and before a search is scheduled, so returning shorter text never searches for the text it replaced. Not called for query changes the component makes itself (e.g. the clear after a selection) or while an IME is mid-composition. Tokenizer uses it to lift delimited values out of the input and commit them as tokens.',
+    },
+    {
       name: 'onChangeQuery',
       type: '(query: string) => void',
       description: 'Callback fired when the search query text changes.',
@@ -209,6 +214,11 @@ export const docsZh = {
       description: '在内部键盘导航之前调用的附加 keydown 处理函数。调用 e.preventDefault() 可跳过内部处理。',
     },
     {
+      name: 'transformQuery',
+      type: '(nextQuery: string) => string',
+      description: 'Rewrites edited input text before it becomes the query. Called with the value the input is about to take; the return value is used instead. Runs before the query is stored, before onChangeQuery, and before a search is scheduled. Not called for query changes the component makes itself or while an IME is mid-composition. Tokenizer uses it to lift delimited values out of the input and commit them as tokens.',
+    },
+    {
       name: 'onChangeQuery',
       type: '(query: string) => void',
       description: '搜索查询文本变更时触发的回调。',
@@ -260,6 +270,7 @@ export const docsDense = {
     anchorRef: 'Anchor for dropdown positioning. Defaults to input.',
     inputXStyle: 'Additional StyleX styles for input.',
     onKeyDown: 'Keydown before internal nav. preventDefault() skips internal handling.',
+    transformQuery: 'Rewrites edited input text before it becomes the query (runs before store/onChangeQuery/search; not for self-made query changes or mid-IME). Tokenizer uses it to split delimited values into tokens.',
     onChangeQuery: 'Fired on query text change.',
     onOpenChange: 'Fired on dropdown open/close.',
     inputId: 'Input ID for label association.',

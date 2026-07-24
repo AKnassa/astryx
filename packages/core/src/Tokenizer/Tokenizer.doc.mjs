@@ -157,8 +157,15 @@ export const docs = {
       name: 'hasCreate',
       type: 'boolean',
       description:
-        "Allow users to create new tokens from free-text input. When true, a \"Create\" option appears in the dropdown for typed text that doesn't match existing results. The onChange change type is 'create' for these items.",
+        "Allow users to create new tokens from free-text input. When true, a \"Create\" option appears in the dropdown for typed text that doesn't match existing results. The onChange change type is 'create' for these items. See delimiters for committing a value with a comma or newline instead of Enter.",
       default: 'false',
+    },
+    {
+      name: 'delimiters',
+      type: 'string[] | RegExp',
+      description:
+        'Characters or patterns that commit the typed text as a token — like Enter, but mid-typing and on paste. Only active with hasCreate. A delimited value (typed at the end of a value, or pasted as a list) is split into one token per trimmed, non-empty, non-duplicate value, up to maxEntries; text with no delimiter still offers "Create" and waits for Enter. Strings match literally (no escaping); a RegExp is matched as written, ignoring capture groups. Pass [] to disable splitting when a value may contain a comma, e.g. "Smith, John".',
+      default: "[',', '\\n']",
     },
     {
       name: 'onChangeQuery',
@@ -199,6 +206,7 @@ export const docs = {
       {guidance: true, description: 'Write a placeholder that tells users what they can search for, such as "Search people..." or "Add tags...", so the input is not a blank mystery.'},
       {guidance: true, description: 'Set maxEntries when the number of selections should be bounded, like limiting a review to 5 approvers.'},
       {guidance: true, description: 'Use hasCreate for free-form tagging where users need to enter values that do not exist in the search source.'},
+      {guidance: true, description: 'Rely on the default delimiters (comma and newline) so users can paste a list; set delimiters={[]} when a value may itself contain a comma, like a name written "Smith, John".'},
       {guidance: true, description: 'Show validation status with the status prop so users know immediately when a selection is missing or invalid.'},
       {guidance: false, description: 'Don\'t use Tokenizer for single-item selection; use Typeahead instead. Tokenizer is for building sets of two or more items.'},
       {guidance: false, description: 'Avoid applying custom colors to individual tokens inside a Tokenizer; use the default token style for visual consistency across the set.'},
@@ -366,6 +374,13 @@ export const docsZh = {
       default: '150',
     },
     {
+      name: 'delimiters',
+      type: 'string[] | RegExp',
+      description:
+        'Characters or patterns that commit the typed text as a token \u2014 like Enter, but mid-typing and on paste. Only active with hasCreate. A delimited value (typed at the end of a value, or pasted as a list) is split into one token per trimmed, non-empty, non-duplicate value, up to maxEntries; text with no delimiter still offers "Create" and waits for Enter. Strings match literally (no escaping); a RegExp is matched as written, ignoring capture groups. Pass [] to disable splitting when a value may contain a comma, e.g. "Smith, John".',
+      default: "[',', '\\n']",
+    },
+    {
       name: 'onChangeQuery',
       type: '(query: string) => void',
       description: '\u641c\u7d22\u67e5\u8be2\u6587\u672c\u53d8\u66f4\u65f6\u89e6\u53d1\u7684\u56de\u8c03\u3002',
@@ -400,6 +415,7 @@ export const docsZh = {
       {guidance: true, description: 'Write a placeholder that tells users what they can search for, such as "Search people..." or "Add tags...", so the input is not a blank mystery.'},
       {guidance: true, description: 'Set maxEntries when the number of selections should be bounded, like limiting a review to 5 approvers.'},
       {guidance: true, description: 'Use hasCreate for free-form tagging where users need to enter values that do not exist in the search source.'},
+      {guidance: true, description: 'Rely on the default delimiters (comma and newline) so users can paste a list; set delimiters={[]} when a value may itself contain a comma, like a name written "Smith, John".'},
       {guidance: true, description: 'Show validation status with the status prop so users know immediately when a selection is missing or invalid.'},
       {guidance: false, description: 'Don\'t use Tokenizer for single-item selection; use Typeahead instead. Tokenizer is for building sets of two or more items.'},
       {guidance: false, description: 'Avoid applying custom colors to individual tokens inside a Tokenizer; use the default token style for visual consistency across the set.'},
@@ -427,6 +443,7 @@ export const docsDense = {
       {guidance: true, description: 'Placeholder that communicates what to search, such as "Search people..." rather than blank.'},
       {guidance: true, description: 'maxEntries when selections are bounded (e.g. 5 approvers max).'},
       {guidance: true, description: 'hasCreate for free-form tagging with values not in the source.'},
+      {guidance: true, description: 'Default delimiters (comma+newline) let users paste a list; delimiters={[]} when a value may contain a comma ("Smith, John").'},
       {guidance: true, description: 'status prop for immediate validation feedback.'},
       {guidance: false, description: 'Don\'t use for single-item selection; use Typeahead instead.'},
       {guidance: false, description: 'Avoid custom token colors; default style for consistency.'},
@@ -438,8 +455,9 @@ export const docsDense = {
     label: 'Accessible label for input.',
     searchSource: 'Data source w/ search+bootstrap methods for populating dropdown.',
     value: 'Array of currently selected items.',
-    onChange: "Fired on selection change. Change arg includes affected item+type ('add'|'create'|'remove'|'reorder').",
+    onChange: "Fired on selection change. Change arg includes affected item+type ('add'|'create'|'remove'|'reorder'); a delimited paste that creates 2+ tokens sets change.items to the full batch.",
     hasCreate: 'Enable free-text token creation. Shows "Create" dropdown option for unmatched typed text.',
+    delimiters: 'Chars/RegExp that commit typed text as a token (like Enter, mid-typing+on paste). hasCreate only. Splits a delimited value/paste into one token per trimmed, non-empty, non-dupe value, up to maxEntries. Strings match literally; RegExp ignores capture groups. [] disables splitting (e.g. "Smith, John"). Default [",", "\\n"].',
     placeholder: 'Input placeholder. Only shown when no tokens selected.',
     maxEntries: 'Max selections allowed. Input hidden at limit.',
     hasClear: 'Clear-all button for bulk removal.',
