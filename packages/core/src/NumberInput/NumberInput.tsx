@@ -21,7 +21,9 @@ import {
   useState,
   useMemo,
   useCallback,
+  useOptimistic,
   useRef,
+  useTransition,
   type FocusEvent,
   type KeyboardEvent,
   type ReactNode,
@@ -296,6 +298,8 @@ interface NumberInputPropsBase extends Omit<
 type NumberInputPropsNonClearable = NumberInputPropsBase & {
   hasClear?: false;
   onChange: (value: number) => void;
+  /** Async action on change. Fires after onChange. */
+  changeAction?: (value: number) => void | Promise<void>;
 };
 
 type NumberInputPropsClearable = NumberInputPropsBase & {
@@ -308,6 +312,8 @@ type NumberInputPropsClearable = NumberInputPropsBase & {
    */
   hasClear: true;
   onChange: (value: number | null) => void;
+  /** Async action on change. Fires after onChange. */
+  changeAction?: (value: number | null) => void | Promise<void>;
 };
 
 export type NumberInputProps =
@@ -376,6 +382,7 @@ export function NumberInput({
   status,
   size: sizeProp,
   onChange,
+  changeAction,
   value,
   placeholder,
   labelTooltip,
@@ -408,6 +415,36 @@ export function NumberInput({
   const inputRef = useRef<HTMLInputElement | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
   const inputGroup = useInputGroup();
+
+  // Optimistic value so a controlled parent that applies the new number
+  // asynchronously does not make the field snap back mid-flight, matching
+  // TextInput/TimeInput/Pagination.
+  const [optimisticValue, setOptimisticValue] = useOptimistic(value);
+  const [, startTransition] = useTransition();
+
+  /**
+   * Fire `changeAction` for a value already committed through `onChange`.
+   *
+   * Kept separate from the `onChange` call sites on purpose: `onChange` is
+   * discriminated on `hasClear`, and TypeScript only narrows it inside the
+   * `hasClear` branches — routing both through one helper would erase that
+   * narrowing. The cast here is the same widening those branches already
+   * prove: `null` is only ever passed under `hasClear`.
+   */
+  const runChangeAction = useCallback(
+    (next: number | null) => {
+      if (!changeAction) {
+        return;
+      }
+      startTransition(async () => {
+        setOptimisticValue(next);
+        await (changeAction as (v: number | null) => void | Promise<void>)(
+          next,
+        );
+      });
+    },
+    [changeAction, setOptimisticValue, startTransition],
+  );
 
   // Pending input while user is typing (null = show formatted value)
   const [pendingInput, setPendingInput] = useState<string | null>(null);
@@ -457,11 +494,11 @@ export function NumberInput({
     if (pendingInput !== null) {
       return pendingInput;
     }
-    if (value == null) {
+    if (optimisticValue == null) {
       return '';
     }
-    return String(value);
-  }, [pendingInput, value]);
+    return String(optimisticValue);
+  }, [pendingInput, optimisticValue]);
 
   // Check if current pending input is valid (for styling purposes)
   const isInputValid = useMemo(() => {
@@ -487,9 +524,10 @@ export function NumberInput({
       const parsed = parseNumberInput(newValue, {min, max, isIntegerOnly});
       if (parsed !== null && parsed !== value) {
         onChange(parsed);
+        runChangeAction(parsed);
       }
     },
-    [value, onChange, min, max, isIntegerOnly, isDisabled],
+    [value, onChange, runChangeAction, min, max, isIntegerOnly, isDisabled],
   );
 
   // Handle focus
@@ -509,6 +547,7 @@ export function NumberInput({
           // input commits null instead of silently reverting on blur.
           if (value != null) {
             onChange(null);
+            runChangeAction(null);
           }
         } else {
           const parsed = parseNumberInput(pendingInput, {
@@ -518,6 +557,7 @@ export function NumberInput({
           });
           if (parsed !== null && parsed !== value) {
             onChange(parsed);
+            runChangeAction(parsed);
           }
         }
       }
@@ -526,7 +566,17 @@ export function NumberInput({
       setPendingInput(null);
       onBlur?.(e);
     },
-    [pendingInput, value, onChange, min, max, isIntegerOnly, onBlur, hasClear],
+    [
+      pendingInput,
+      value,
+      onChange,
+      runChangeAction,
+      min,
+      max,
+      isIntegerOnly,
+      onBlur,
+      hasClear,
+    ],
   );
 
   // Handle keyboard events
@@ -540,6 +590,7 @@ export function NumberInput({
             // commits null instead of reverting.
             if (value != null) {
               onChange(null);
+              runChangeAction(null);
             }
           } else {
             const parsed = parseNumberInput(pendingInput, {
@@ -549,6 +600,7 @@ export function NumberInput({
             });
             if (parsed !== null && parsed !== value) {
               onChange(parsed);
+              runChangeAction(parsed);
             }
           }
         }
@@ -560,6 +612,7 @@ export function NumberInput({
       pendingInput,
       value,
       onChange,
+      runChangeAction,
       min,
       max,
       isIntegerOnly,
@@ -573,10 +626,11 @@ export function NumberInput({
   const handleClear = useCallback(() => {
     if (hasClear) {
       onChange(null);
+      runChangeAction(null);
     }
     setPendingInput(null);
     inputRef.current?.focus();
-  }, [hasClear, onChange]);
+  }, [hasClear, onChange, runChangeAction]);
 
   // Focus input when clicking anywhere on the wrapper (icons, padding, etc.)
   const {onClick: handleWrapperClick, onMouseUp: handleWrapperMouseUp} =

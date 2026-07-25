@@ -915,4 +915,127 @@ describe('keyboard clearing with hasClear (#3599)', () => {
     expect(onChange).not.toHaveBeenCalled();
     expect((input as HTMLInputElement).value).toBe('42');
   });
+  // ===========================================================================
+  // changeAction — input-family convention parity (#4186)
+  // ===========================================================================
+
+  describe('changeAction', () => {
+    it('fires onChange then changeAction with the committed number', async () => {
+      const user = userEvent.setup();
+      const order: string[] = [];
+      const onChange = vi.fn(() => order.push('onChange'));
+      const changeAction = vi.fn(() => {
+        order.push('changeAction');
+      });
+
+      render(
+        <NumberInput
+          label="Qty"
+          value={1}
+          onChange={onChange}
+          changeAction={changeAction}
+        />,
+      );
+
+      await user.clear(screen.getByLabelText('Qty'));
+      await user.type(screen.getByLabelText('Qty'), '7');
+
+      expect(onChange).toHaveBeenLastCalledWith(7);
+      expect(changeAction).toHaveBeenLastCalledWith(7);
+      expect(order.slice(-2)).toEqual(['onChange', 'changeAction']);
+    });
+
+    it('shows the optimistic value while changeAction is pending', async () => {
+      const user = userEvent.setup();
+      let resolveAction: (() => void) | undefined;
+      const changeAction = vi.fn(
+        async () =>
+          new Promise<void>(resolve => {
+            resolveAction = resolve;
+          }),
+      );
+
+      // Controlled parent that has NOT applied the new value yet.
+      render(
+        <>
+          <NumberInput
+            label="Qty"
+            value={1}
+            onChange={() => {}}
+            changeAction={changeAction}
+          />
+          <button type="button">elsewhere</button>
+        </>,
+      );
+
+      const input = screen.getByLabelText('Qty');
+      await user.clear(input);
+      await user.type(input, '7');
+
+      // Blur clears the pending text, so the field falls back to the value
+      // pipeline. That is the only moment the optimistic state is
+      // load-bearing: without it the parent's stale 1 snaps back mid-flight.
+      await user.click(screen.getByRole('button', {name: 'elsewhere'}));
+
+      await waitFor(() => expect(changeAction).toHaveBeenLastCalledWith(7));
+      expect(input).toHaveValue(7);
+
+      resolveAction?.();
+    });
+
+    it('does not fire changeAction while the typed value is invalid', async () => {
+      const user = userEvent.setup();
+      const onChange = vi.fn();
+      const changeAction = vi.fn();
+
+      render(
+        <NumberInput
+          label="Qty"
+          value={1}
+          onChange={onChange}
+          changeAction={changeAction}
+          min={0}
+          max={10}
+        />,
+      );
+
+      await user.clear(screen.getByLabelText('Qty'));
+      await user.type(screen.getByLabelText('Qty'), '99');
+
+      // 99 is out of range, so nothing is committed through either channel.
+      expect(onChange).not.toHaveBeenCalledWith(99);
+      expect(changeAction).not.toHaveBeenCalledWith(99);
+    });
+
+    it('fires changeAction with null when the value is cleared', async () => {
+      const user = userEvent.setup();
+      const changeAction = vi.fn();
+
+      render(
+        <NumberInput
+          label="Qty"
+          value={5}
+          onChange={() => {}}
+          changeAction={changeAction}
+          hasClear
+        />,
+      );
+
+      await user.click(screen.getByRole('button', {name: 'Clear Qty'}));
+
+      await waitFor(() => expect(changeAction).toHaveBeenCalledWith(null));
+    });
+
+    it('still commits through onChange when no changeAction is given', async () => {
+      const user = userEvent.setup();
+      const onChange = vi.fn();
+
+      render(<NumberInput label="Qty" value={1} onChange={onChange} />);
+
+      await user.clear(screen.getByLabelText('Qty'));
+      await user.type(screen.getByLabelText('Qty'), '7');
+
+      expect(onChange).toHaveBeenLastCalledWith(7);
+    });
+  });
 });

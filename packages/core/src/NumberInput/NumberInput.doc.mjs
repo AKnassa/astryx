@@ -6,7 +6,17 @@ export const docs = {
   name: 'NumberInput',
   displayName: 'Number Input',
   category: 'Data Input',
-  keywords: ["numberinput","numberfield","stepper","spinner","counter","increment","decrement","quantity","numberpicker"],
+  keywords: [
+    'numberinput',
+    'numberfield',
+    'stepper',
+    'spinner',
+    'counter',
+    'increment',
+    'decrement',
+    'quantity',
+    'numberpicker',
+  ],
   props: [
     {
       name: 'label',
@@ -27,6 +37,12 @@ export const docs = {
       description:
         'Callback fired when input value changes (only on valid input).',
       required: true,
+    },
+    {
+      name: 'changeAction',
+      type: '(value: number) => void | Promise<void>',
+      description:
+        'Async action fired after onChange. Wrapped in a React transition so the field shows the new number optimistically while the action is pending. With hasClear, it also receives null.',
     },
     {
       name: 'size',
@@ -82,12 +98,14 @@ export const docs = {
     {
       name: 'startIcon',
       type: 'IconType',
-      description: 'Icon to display at the start of the input. See `astryx docs icons` for valid semantic names.',
+      description:
+        'Icon to display at the start of the input. See `astryx docs icons` for valid semantic names.',
     },
     {
       name: 'labelIcon',
       type: 'IconType',
-      description: 'Icon to display before the label text. See `astryx docs icons` for valid semantic names.',
+      description:
+        'Icon to display before the label text. See `astryx docs icons` for valid semantic names.',
     },
     {
       name: 'status',
@@ -168,18 +186,57 @@ export const docs = {
     description:
       'A form input for numeric values with built-in validation, min/max constraints, and step controls. Use NumberInput for quantities, measurements, percentages, and similar inputs.',
     bestPractices: [
-      { guidance: true, description: 'Set min, max, and step to guide users toward valid values.' },
-      { guidance: true, description: 'Show units (e.g. "%" or "GB") so users know what the number represents.' },
-      { guidance: false, description: 'Use NumberInput for free-form text that happens to contain numbers; use TextInput instead.' },
-      { guidance: false, description: 'Set both isOptional and isRequired on the same field.' },
-      { guidance: false, description: "Wrap a disabled NumberInput in Tooltip to explain why it's disabled; disabled controls swallow the hover events the wrapper needs. Use the disabledMessage prop instead." },
+      {
+        guidance: true,
+        description:
+          'Set min, max, and step to guide users toward valid values.',
+      },
+      {
+        guidance: true,
+        description:
+          'Show units (e.g. "%" or "GB") so users know what the number represents.',
+      },
+      {
+        guidance: false,
+        description:
+          'Use NumberInput for free-form text that happens to contain numbers; use TextInput instead.',
+      },
+      {
+        guidance: false,
+        description: 'Set both isOptional and isRequired on the same field.',
+      },
+      {
+        guidance: false,
+        description:
+          "Wrap a disabled NumberInput in Tooltip to explain why it's disabled; disabled controls swallow the hover events the wrapper needs. Use the disabledMessage prop instead.",
+      },
     ],
     anatomy: [
-      {name: 'Label', required: true, description: 'The label for the number input.'},
-      {name: 'Description', required: false, description: 'Additional description text below the label.'},
-      {name: 'Icon', required: false, description: 'An optional icon within the input.'},
-      {name: 'Placeholder', required: false, description: 'Placeholder text shown when the input is empty.'},
-      {name: 'Spinner', required: false, description: 'Increment and decrement controls for the value.'},
+      {
+        name: 'Label',
+        required: true,
+        description: 'The label for the number input.',
+      },
+      {
+        name: 'Description',
+        required: false,
+        description: 'Additional description text below the label.',
+      },
+      {
+        name: 'Icon',
+        required: false,
+        description: 'An optional icon within the input.',
+      },
+      {
+        name: 'Placeholder',
+        required: false,
+        description: 'Placeholder text shown when the input is empty.',
+      },
+      {
+        name: 'Spinner',
+        required: false,
+        description: 'Increment and decrement controls for the value.',
+      },
     ],
   },
 };
@@ -192,8 +249,7 @@ export const docsZh = {
     {
       name: 'label',
       type: 'string',
-      description:
-        '输入框的标签文本（始终渲染以确保无障碍访问）。',
+      description: '输入框的标签文本（始终渲染以确保无障碍访问）。',
       required: true,
     },
     {
@@ -205,9 +261,14 @@ export const docsZh = {
     {
       name: 'onChange',
       type: '(value: number) => void',
-      description:
-        '输入值变化时触发的回调（仅在输入有效时触发）。',
+      description: '输入值变化时触发的回调（仅在输入有效时触发）。',
       required: true,
+    },
+    {
+      name: 'changeAction',
+      type: '(value: number) => void | Promise<void>',
+      description:
+        '在 onChange 之后触发的异步操作。包装在 React transition 中，操作挂起时输入框会乐观地显示新数值。启用 hasClear 时也会接收 null。',
     },
     {
       name: 'size',
@@ -218,8 +279,7 @@ export const docsZh = {
     {
       name: 'isLabelHidden',
       type: 'boolean',
-      description:
-        '视觉隐藏标签（屏幕阅读器仍可访问）。',
+      description: '视觉隐藏标签（屏幕阅读器仍可访问）。',
     },
     {
       name: 'description',
@@ -229,14 +289,12 @@ export const docsZh = {
     {
       name: 'isOptional',
       type: 'boolean',
-      description:
-        '字段是否可选（与 isRequired 互斥）。',
+      description: '字段是否可选（与 isRequired 互斥）。',
     },
     {
       name: 'isRequired',
       type: 'boolean',
-      description:
-        '字段是否必填（与 isOptional 互斥）。',
+      description: '字段是否必填（与 isOptional 互斥）。',
     },
     {
       name: 'isDisabled',
@@ -257,8 +315,7 @@ export const docsZh = {
     {
       name: 'labelTooltip',
       type: 'string',
-      description:
-        '在标签末尾的信息图标中显示的工具提示文本。',
+      description: '在标签末尾的信息图标中显示的工具提示文本。',
     },
     {
       name: 'startIcon',
@@ -294,8 +351,7 @@ export const docsZh = {
     {
       name: 'units',
       type: 'string | null',
-      description:
-        '在输入框末尾显示的单位文本（例如"%"或"GB"）。',
+      description: '在输入框末尾显示的单位文本（例如"%"或"GB"）。',
     },
     {
       name: 'isIntegerOnly',
@@ -305,7 +361,8 @@ export const docsZh = {
     {
       name: 'hasClear',
       type: 'boolean',
-      description: '输入有值时显示清除 (×) 按鈕。启用后， onChange 回调还接受 null 表示用户已清空输入。',
+      description:
+        '输入有值时显示清除 (×) 按鈕。启用后， onChange 回调还接受 null 表示用户已清空输入。',
       default: 'false',
     },
     {
@@ -348,47 +405,128 @@ export const docsZh = {
     description:
       'A form input for numeric values with built-in validation, min/max constraints, and step controls. Use NumberInput for quantities, measurements, percentages, and similar inputs.',
     bestPractices: [
-      { guidance: true, description: 'Set min, max, and step to guide users toward valid values.' },
-      { guidance: true, description: 'Show units (e.g. "%" or "GB") so users know what the number represents.' },
-      { guidance: false, description: 'Use NumberInput for free-form text that happens to contain numbers; use TextInput instead.' },
-      { guidance: false, description: 'Set both isOptional and isRequired on the same field.' },
-      { guidance: false, description: "Wrap a disabled NumberInput in Tooltip to explain why it's disabled; disabled controls swallow the hover events the wrapper needs. Use the disabledMessage prop instead." },
+      {
+        guidance: true,
+        description:
+          'Set min, max, and step to guide users toward valid values.',
+      },
+      {
+        guidance: true,
+        description:
+          'Show units (e.g. "%" or "GB") so users know what the number represents.',
+      },
+      {
+        guidance: false,
+        description:
+          'Use NumberInput for free-form text that happens to contain numbers; use TextInput instead.',
+      },
+      {
+        guidance: false,
+        description: 'Set both isOptional and isRequired on the same field.',
+      },
+      {
+        guidance: false,
+        description:
+          "Wrap a disabled NumberInput in Tooltip to explain why it's disabled; disabled controls swallow the hover events the wrapper needs. Use the disabledMessage prop instead.",
+      },
     ],
     anatomy: [
-      {name: 'Label', required: true, description: 'The label for the number input.'},
-      {name: 'Description', required: false, description: 'Additional description text below the label.'},
-      {name: 'Icon', required: false, description: 'An optional icon within the input.'},
-      {name: 'Placeholder', required: false, description: 'Placeholder text shown when the input is empty.'},
-      {name: 'Spinner', required: false, description: 'Increment and decrement controls for the value.'},
+      {
+        name: 'Label',
+        required: true,
+        description: 'The label for the number input.',
+      },
+      {
+        name: 'Description',
+        required: false,
+        description: 'Additional description text below the label.',
+      },
+      {
+        name: 'Icon',
+        required: false,
+        description: 'An optional icon within the input.',
+      },
+      {
+        name: 'Placeholder',
+        required: false,
+        description: 'Placeholder text shown when the input is empty.',
+      },
+      {
+        name: 'Spinner',
+        required: false,
+        description: 'Increment and decrement controls for the value.',
+      },
     ],
   },
 };
 
 /** @type {import('../docs-types').TranslationDoc} */
 export const docsDense = {
-  description: 'Number input component for collecting numeric user input w/ validation.',
+  description:
+    'Number input component for collecting numeric user input w/ validation.',
   usage: {
     description:
       'A form input for numeric values with built-in validation, min/max constraints, and step controls. Use NumberInput for quantities, measurements, percentages, and similar inputs.',
     bestPractices: [
-      { guidance: true, description: 'Set min, max, and step to guide users toward valid values.' },
-      { guidance: true, description: 'Show units (e.g. "%" or "GB") so users know what the number represents.' },
-      { guidance: false, description: 'Use NumberInput for free-form text that happens to contain numbers; use TextInput instead.' },
-      { guidance: false, description: 'Set both isOptional and isRequired on the same field.' },
-      { guidance: false, description: "Wrap a disabled NumberInput in Tooltip to explain why it's disabled; disabled controls swallow the hover events the wrapper needs. Use the disabledMessage prop instead." },
+      {
+        guidance: true,
+        description:
+          'Set min, max, and step to guide users toward valid values.',
+      },
+      {
+        guidance: true,
+        description:
+          'Show units (e.g. "%" or "GB") so users know what the number represents.',
+      },
+      {
+        guidance: false,
+        description:
+          'Use NumberInput for free-form text that happens to contain numbers; use TextInput instead.',
+      },
+      {
+        guidance: false,
+        description: 'Set both isOptional and isRequired on the same field.',
+      },
+      {
+        guidance: false,
+        description:
+          "Wrap a disabled NumberInput in Tooltip to explain why it's disabled; disabled controls swallow the hover events the wrapper needs. Use the disabledMessage prop instead.",
+      },
     ],
     anatomy: [
-      {name: 'Label', required: true, description: 'The label for the number input.'},
-      {name: 'Description', required: false, description: 'Additional description text below the label.'},
-      {name: 'Icon', required: false, description: 'An optional icon within the input.'},
-      {name: 'Placeholder', required: false, description: 'Placeholder text shown when the input is empty.'},
-      {name: 'Spinner', required: false, description: 'Increment and decrement controls for the value.'},
+      {
+        name: 'Label',
+        required: true,
+        description: 'The label for the number input.',
+      },
+      {
+        name: 'Description',
+        required: false,
+        description: 'Additional description text below the label.',
+      },
+      {
+        name: 'Icon',
+        required: false,
+        description: 'An optional icon within the input.',
+      },
+      {
+        name: 'Placeholder',
+        required: false,
+        description: 'Placeholder text shown when the input is empty.',
+      },
+      {
+        name: 'Spinner',
+        required: false,
+        description: 'Increment and decrement controls for the value.',
+      },
     ],
   },
   propDescriptions: {
     label: 'Label text (always rendered for accessibility).',
     value: 'Current input value.',
     onChange: 'Callback on valid input change.',
+    changeAction:
+      'Async action after onChange; transition-wrapped for optimistic display.',
     size: 'Size variant.',
     isLabelHidden: 'Visually hide label (still accessible to screen readers).',
     description: 'Text between label + input.',
@@ -407,7 +545,8 @@ export const docsDense = {
     step: 'Step increment.',
     units: 'Units suffix (e.g. "%" or "GB").',
     isIntegerOnly: 'Only allow integer values.',
-    hasClear: 'Shows clear button when input has value. onChange also accepts null on clear.',
+    hasClear:
+      'Shows clear button when input has value. onChange also accepts null on clear.',
     htmlName: 'HTML name for form submissions.',
     autoComplete: 'HTML autocomplete attribute.',
     hasAutoFocus: 'Focus input on mount.',
