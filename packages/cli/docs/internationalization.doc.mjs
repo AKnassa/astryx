@@ -171,8 +171,78 @@ export default function App() {
           text: 'Keep the two providers in sync on locale, and each library owns its own catalog. Astryx never sees your app strings, and your i18n library never sees astryx internals. Runtime locale swap works the same way: re-render both providers with a new `locale` prop and the whole tree updates live.',
         },
         {
+          type: 'heading',
+          level: 3,
+          text: 'Reusing your i18n runtime with `translator`',
+        },
+        {
           type: 'prose',
-          text: "Single-catalog usage (where an external i18n runtime like react-intl or i18next resolves both your app strings AND astryx's strings through one provider) is on the roadmap via a `Translator` adapter. Track [facebook/astryx#4029](https://github.com/facebook/astryx/issues/4029). For now, run the two providers side by side as shown above.",
+          text: "Pass a `translator` to `<InternationalizationProvider>` to format astryx's strings with the i18n runtime you already ship, instead of the bundled `intl-messageformat`. A translator is one method: `format(message, values?, locale?)`.",
+        },
+        {
+          type: 'code',
+          lang: 'tsx',
+          label: 'Format astryx strings with react-intl',
+          code: `import {useMemo, type ReactNode} from 'react';
+import {
+  InternationalizationProvider,
+  type Translator,
+} from '@astryxdesign/core/i18n';
+import {IntlProvider, ReactIntlErrorCode, useIntl} from 'react-intl';
+import appFr from './locales/app/fr.json';
+
+function AstryxViaReactIntl({children}: {children: ReactNode}) {
+  const intl = useIntl();
+  const translator: Translator = useMemo(
+    () => ({
+      // \`message\` is the ICU string astryx already resolved, not a key, so it
+      // goes in as react-intl's \`defaultMessage\`. Reusing it as the \`id\` lets
+      // an app catalog override an astryx string by keying on the same text.
+      format: (message, values) =>
+        intl.formatMessage({id: message, defaultMessage: message}, values),
+    }),
+    [intl],
+  );
+
+  return (
+    <InternationalizationProvider locale={intl.locale} translator={translator}>
+      {children}
+    </InternationalizationProvider>
+  );
+}
+
+export default function App() {
+  return (
+    <IntlProvider
+      locale="fr"
+      messages={appFr}
+      // Astryx messages are not in \`appFr\`, so react-intl reports each one as
+      // a missing translation before falling back to \`defaultMessage\`. That
+      // fallback is the intended path here — drop the noise.
+      onError={error => {
+        if (error.code !== ReactIntlErrorCode.MISSING_TRANSLATION) {
+          console.error(error);
+        }
+      }}
+    >
+      <AstryxViaReactIntl>
+        <YourApp />
+      </AstryxViaReactIntl>
+    </IntlProvider>
+  );
+}`,
+        },
+        {
+          type: 'prose',
+          text: "Astryx still owns the lookup. `overrides`, then `messages`, then the parent locale (`pt-BR` → `pt`), then the shipped `en` catalog — the translator only sees the message that chain produced, so you do not have to load astryx's catalog into your runtime's store. Messages with no values skip the translator entirely; there is nothing to interpolate.",
+        },
+        {
+          type: 'prose',
+          text: "What you gain over the two-provider pattern is one runtime: your ICU formats, number and date configuration, and timezone apply to astryx's strings too. What you take on is the adapter itself — astryx does not validate the string your runtime returns.",
+        },
+        {
+          type: 'prose',
+          text: 'The same shape adapts any ICU-capable runtime. i18next interpolates `{{mustache}}` by default, so add `i18next-icu` before wiring it up. Omit `translator` and nothing changes: the bundled runtime keeps formatting astryx strings exactly as it does today, and the two-provider pattern above stays a valid alternative when you want runtime isolation.',
         },
       ],
     },

@@ -15,16 +15,23 @@
  * SYNC: When modified, update these files to stay in sync:
  * - /packages/core/src/i18n/InternationalizationProvider.tsx
  * - /packages/core/src/i18n/t.client.ts
+ * - /packages/core/src/i18n/translator.ts
  * - /packages/core/src/i18n/index.ts
  */
 
 import {createContext} from 'react';
+import type {Translator} from './translator';
 import type {Locale, MessagesByLocale, Overrides} from './types';
 
 export interface InternationalizationContextValue {
   locale: Locale;
   messages: MessagesByLocale;
   overrides?: Overrides;
+  /**
+   * Optional consumer i18n runtime. When present it formats the message
+   * astryx already resolved; lookup and locale fallback stay in resolve().
+   */
+  translator?: Translator;
 }
 
 /**

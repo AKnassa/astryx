@@ -10,7 +10,8 @@
  * The public API is deliberately small:
  *   - InternationalizationProvider — provider component
  *   - useTranslator               — hook returning a translator function
- *   - Translator                  — interface for consumer-injected runtimes
+ *   - Translator                  — interface for consumer-injected runtimes,
+ *                                   passed as the provider's `translator` prop
  *
  * SYNC: When modified, update these files to stay in sync:
  * - /packages/core/src/index.ts

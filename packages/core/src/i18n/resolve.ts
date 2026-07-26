@@ -2,7 +2,7 @@
 
 /**
  * @file resolve.ts
- * @input Key + values + locale + catalog + overrides
+ * @input Key + values + locale + catalog + overrides + optional Translator
  * @output Formatted message string
  * @position Shared lookup + ICU formatting core, used by useTranslator().
  *
@@ -14,12 +14,19 @@
  *   5. Shipped en catalog (the source of truth, always present)
  *   6. The key itself (dev-visible fallback, warns once)
  *
+ * Lookup always happens here. A consumer-supplied `Translator` replaces ONLY
+ * the final ICU format step, so the fallback chain above behaves identically
+ * whether or not an external i18n runtime is plugged in (#4029).
+ *
  * SYNC: When modified, update these files to stay in sync:
  * - /packages/core/src/i18n/useTranslator.ts
+ * - /packages/core/src/i18n/translator.ts
  * - /packages/core/src/i18n/__tests__/resolve.test.ts
+ * - /packages/core/src/i18n/__tests__/translator.test.tsx
  */
 
 import IntlMessageFormat from 'intl-messageformat';
+import type {Translator} from './translator';
 import type {Catalog, Locale, MessagesByLocale, Overrides} from './types';
 import enSource from '../../locales/en.json' with {type: 'json'};
 import {warnOnce, __resetDevWarnings} from '../utils/devWarning';
@@ -115,6 +122,7 @@ export function resolve(
   locale: Locale,
   messages: MessagesByLocale,
   overrides: Overrides | undefined,
+  translator?: Translator,
 ): string {
   const result = lookup(key, locale, messages, overrides);
 
@@ -132,8 +140,16 @@ export function resolve(
   }
 
   if (values === undefined) {
-    // Static string — skip the parser entirely for the common case
+    // Static string — skip the parser entirely for the common case. This
+    // short-circuit runs before the translator too: there is nothing to
+    // interpolate, so an external runtime would only echo `result` back.
     return result;
+  }
+
+  if (translator !== undefined) {
+    // The consumer's i18n runtime formats the already-resolved ICU message.
+    // It never sees an `@astryx.*` key — lookup and locale fallback stay here.
+    return translator.format(result, values, locale);
   }
 
   const formatted = getFormatter(result, locale).format(values);

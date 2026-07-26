@@ -44,7 +44,14 @@ export function useTranslator(): TranslatorFn {
   const ctx = use(InternationalizationContext);
   return useCallback(
     (key: string, values?: Record<string, unknown>) =>
-      resolve(key, values, ctx.locale, ctx.messages, ctx.overrides),
-    [ctx.locale, ctx.messages, ctx.overrides],
+      resolve(
+        key,
+        values,
+        ctx.locale,
+        ctx.messages,
+        ctx.overrides,
+        ctx.translator,
+      ),
+    [ctx.locale, ctx.messages, ctx.overrides, ctx.translator],
   );
 }

@@ -67,6 +67,13 @@ export const docs = {
         'Sparse per-locale key overrides applied on top of shipped defaults. Overrides are locale-keyed so a runtime locale swap picks up the correct set.',
     },
     {
+      name: 'translator',
+      type: 'Translator',
+      required: false,
+      description:
+        'Optional adapter that reuses an existing i18n runtime (react-intl, i18next, LinguiJS) to format astryx strings instead of the bundled intl-messageformat. Shape is `{format(message: string, values?: Record<string, unknown>, locale?: string): string}`. Astryx keeps its own lookup — overrides, then messages, then the parent locale, then the shipped "en" catalog — and passes the already-resolved ICU message, never an `@astryx.*` key. Messages with no values skip the translator.',
+    },
+    {
       name: 'children',
       type: 'ReactNode',
       required: true,
@@ -125,6 +132,36 @@ export function AppI18n({children}: {children: ReactNode}) {
   );
 }`,
     },
+    {
+      label: 'Format astryx strings with an existing i18n runtime',
+      code: `import {useMemo, type ReactNode} from 'react';
+import {
+  InternationalizationProvider,
+  type Translator,
+} from '@astryxdesign/core/i18n';
+import {useIntl} from 'react-intl';
+
+export function AppI18n({children}: {children: ReactNode}) {
+  const intl = useIntl();
+  // \`message\` is the ICU string astryx already resolved, not a key, so it
+  // goes in as react-intl's \`defaultMessage\`. Astryx keys are absent from
+  // your catalog, so set an <IntlProvider onError> that ignores
+  // ReactIntlErrorCode.MISSING_TRANSLATION.
+  const translator: Translator = useMemo(
+    () => ({
+      format: (message, values) =>
+        intl.formatMessage({id: message, defaultMessage: message}, values),
+    }),
+    [intl],
+  );
+
+  return (
+    <InternationalizationProvider locale={intl.locale} translator={translator}>
+      {children}
+    </InternationalizationProvider>
+  );
+}`,
+    },
   ],
 };
 
@@ -143,5 +180,7 @@ export const docsDense = {
       'map of BCP 47 tag to translation catalog; "en" is always available',
     overrides:
       'sparse per-locale key overrides applied on top of shipped defaults',
+    translator:
+      'optional `{format(message, values?, locale?)}` adapter that formats astryx strings with an existing i18n runtime; astryx still does the lookup and passes a resolved ICU message',
   },
 };
