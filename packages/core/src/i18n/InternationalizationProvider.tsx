@@ -67,11 +67,21 @@ export interface InternationalizationProviderProps {
    * already-resolved ICU message — never an `@astryx.*` key — so you do not
    * need to load astryx's catalog into your runtime's store.
    *
-   * Messages with no values skip the translator; there is nothing to
-   * interpolate.
+   * Every astryx string goes through it, value-less ones included, so keep
+   * your adapter's miss path cheap. It must return a string; anything else
+   * warns once in development and falls back to astryx's resolved message.
+   *
+   * A `translator` holds a function, so it can only be passed from a client
+   * component — keep the wrapper in a `'use client'` module. A nested
+   * `InternationalizationProvider` replaces it rather than inheriting it,
+   * exactly as it does `messages` and `overrides`.
+   *
+   * Memoize it: a fresh object each render re-renders every astryx string
+   * in the subtree.
    *
    * @example
    * ```
+   * 'use client';
    * const intl = useIntl();
    * const translator = useMemo(
    *   () => ({

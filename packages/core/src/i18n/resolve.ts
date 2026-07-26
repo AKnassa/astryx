@@ -15,8 +15,11 @@
  *   6. The key itself (dev-visible fallback, warns once)
  *
  * Lookup always happens here. A consumer-supplied `Translator` replaces ONLY
- * the final ICU format step, so the fallback chain above behaves identically
- * whether or not an external i18n runtime is plugged in (#4029).
+ * the formatting step, so the fallback chain above behaves identically whether
+ * or not an external i18n runtime is plugged in (#4029). Every message the
+ * chain resolves is handed to that translator — value-less ones included, so a
+ * single consumer catalog can own all of astryx's strings and not just the
+ * quarter that interpolate.
  *
  * SYNC: When modified, update these files to stay in sync:
  * - /packages/core/src/i18n/useTranslator.ts
@@ -139,17 +142,39 @@ export function resolve(
     return key;
   }
 
-  if (values === undefined) {
-    // Static string — skip the parser entirely for the common case. This
-    // short-circuit runs before the translator too: there is nothing to
-    // interpolate, so an external runtime would only echo `result` back.
-    return result;
-  }
-
-  if (translator !== undefined) {
+  // `!= null`, not `!== undefined`: the prop is typed optional, so TS callers
+  // cannot pass null — but a JS consumer writing `translator={on ? t : null}`
+  // can, and `.format` on null would take down every astryx string in the
+  // tree. A malformed object still throws, loudly, as a wiring bug should.
+  if (translator != null) {
     // The consumer's i18n runtime formats the already-resolved ICU message.
     // It never sees an `@astryx.*` key — lookup and locale fallback stay here.
-    return translator.format(result, values, locale);
+    //
+    // Every resolved message is handed over, including value-less ones —
+    // which is most of them. A runtime that owns the app's catalog can
+    // translate those too, and only the consumer knows whether it needs to,
+    // so astryx does not decide for them by short-circuiting first.
+    const output = translator.format(result, values, locale);
+    if (typeof output !== 'string') {
+      // `format` is typed to return a string, but a translator is consumer
+      // code and the type is not enforced at runtime — react-intl returns a
+      // ReactNode[] for rich text, i18next can return null for a miss.
+      // astryx's output lands in aria-label and title, where a non-string
+      // becomes "[object Object]" or drops the attribute. Degrade to the
+      // message astryx already resolved: still correct, always a string.
+      warnOnce(
+        `astryx-i18n:translator::${key}`,
+        'astryx-i18n',
+        `translator.format returned ${typeof output} for ${key} (locale: ${locale}); expected a string. Using astryx's resolved message instead.`,
+      );
+      return result;
+    }
+    return output;
+  }
+
+  if (values === undefined) {
+    // Static string — skip the ICU parser entirely for the common case.
+    return result;
   }
 
   const formatted = getFormatter(result, locale).format(values);

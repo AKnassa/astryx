@@ -183,7 +183,9 @@ export default function App() {
           type: 'code',
           lang: 'tsx',
           label: 'Format astryx strings with react-intl',
-          code: `import {useMemo, type ReactNode} from 'react';
+          code: `'use client';
+
+import {useMemo, type ReactNode} from 'react';
 import {
   InternationalizationProvider,
   type Translator,
@@ -191,15 +193,25 @@ import {
 import {IntlProvider, ReactIntlErrorCode, useIntl} from 'react-intl';
 import appFr from './locales/app/fr.json';
 
+// A translator holds a function, so it cannot cross the server/client
+// boundary — this wrapper has to be a client component.
 function AstryxViaReactIntl({children}: {children: ReactNode}) {
   const intl = useIntl();
   const translator: Translator = useMemo(
     () => ({
       // \`message\` is the ICU string astryx already resolved, not a key, so it
       // goes in as react-intl's \`defaultMessage\`. Reusing it as the \`id\` lets
-      // an app catalog override an astryx string by keying on the same text.
+      // an app catalog override any astryx string by keying on the same text —
+      // \`"Go to next page": "Page suivante"\` in \`appFr\` just works.
+      //
+      // The cast is react-intl's typing, not astryx's: it accepts a narrower
+      // value type than \`Record<string, unknown>\`, and its rich-text overload
+      // returns ReactNode[]. Astryx needs a string back.
       format: (message, values) =>
-        intl.formatMessage({id: message, defaultMessage: message}, values),
+        intl.formatMessage(
+          {id: message, defaultMessage: message},
+          values as Record<string, string | number | Date>,
+        ),
     }),
     [intl],
   );
@@ -234,11 +246,15 @@ export default function App() {
         },
         {
           type: 'prose',
-          text: "Astryx still owns the lookup. `overrides`, then `messages`, then the parent locale (`pt-BR` → `pt`), then the shipped `en` catalog — the translator only sees the message that chain produced, so you do not have to load astryx's catalog into your runtime's store. Messages with no values skip the translator entirely; there is nothing to interpolate.",
+          text: "Astryx still owns the lookup. `overrides`, then `messages`, then the parent locale (`pt-BR` → `pt`), then the shipped `en` catalog — the translator only sees the message that chain produced, so you do not have to load astryx's catalog into your runtime's store. Every astryx string comes through, including the ones with nothing to interpolate (`values` is `undefined` for those). That is most of the catalog — 162 of 197 shipped strings — so keying your catalog on the English text covers all of them, and your runtime's missing-translation path runs on every one. Make sure that path is cheap.",
         },
         {
           type: 'prose',
-          text: "What you gain over the two-provider pattern is one runtime: your ICU formats, number and date configuration, and timezone apply to astryx's strings too. What you take on is the adapter itself — astryx does not validate the string your runtime returns.",
+          text: "What you gain over the two-provider pattern is one runtime: your ICU formats, number and date configuration, and timezone apply to astryx's strings too. What you take on is the adapter itself. Astryx checks only that you returned a string — anything else warns once in development and falls back to the message astryx resolved, so a stray `ReactNode[]` never reaches an `aria-label`. It does not catch exceptions: an adapter that throws takes the render with it, deliberately, because a broken adapter is a bug you want to see.",
+        },
+        {
+          type: 'prose',
+          text: "Two shapes to keep in mind. A translator holds a function, so it can only be passed from a client component — in the Next.js App Router, keep the wrapper in a `'use client'` module; a server-rendered subtree stays on the bundled runtime. And a nested `InternationalizationProvider` replaces the translator rather than inheriting it, the same as `messages` and `overrides` — pass it again if you nest one to scope a locale.",
         },
         {
           type: 'prose',

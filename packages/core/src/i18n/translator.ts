@@ -31,6 +31,21 @@ export interface Translator {
    * `message` is a message astryx has ALREADY resolved through its own chain
    * (overrides → catalog → parent locale → shipped `en`), never an
    * `@astryx.*` key — so the translator does not need astryx's catalog.
+   *
+   * Called for EVERY astryx string, including ones with nothing to
+   * interpolate — `values` is `undefined` for those. Most of astryx's
+   * catalog is value-less, so a runtime that keys its own catalog on the
+   * English text can translate all of it, not just the interpolating quarter.
+   * Keep the path cheap: this runs once per string per render.
+   *
+   * `locale` is the locale the app ASKED for, which is not necessarily the
+   * language `message` is written in — astryx ships only `en`, so an app on
+   * `fr` with no French catalog gets English text alongside `'fr'`.
+   *
+   * Must return a string. Anything else is reported once via `console.warn`
+   * in development and replaced by astryx's own resolved message, because the
+   * result also feeds `aria-label` and `title`. Exceptions are not caught: a
+   * broken adapter should be loud, not silently papered over.
    */
   format(
     message: string,
