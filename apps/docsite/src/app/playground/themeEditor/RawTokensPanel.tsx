@@ -31,9 +31,12 @@ import {
   durationDefaults,
   easeDefaults,
 } from '@astryxdesign/core/theme';
+import {Tooltip} from '@astryxdesign/core/Tooltip';
 import {ColorSwatch} from './ColorSwatch';
 import {TokenRow} from './TokenRow';
 import {COLOR_CATEGORIES, TYPOGRAPHY_CATEGORIES} from './constants';
+import {summarizeSpacingUsage} from './helpers';
+import {spacingUsage} from '../../../generated/spacingUsage';
 
 const s = stylex.create({
   scrollX: {
@@ -116,11 +119,32 @@ interface EditorProps {
   onChange: (name: string, value: string) => void;
 }
 
+/**
+ * "Used by" line for a spacing token: which components a change actually
+ * moves, read out of component source at build time (issue #808). Only spacing
+ * tokens are mapped, so this renders nothing for the size group that shares
+ * SpacingEditor.
+ */
+function SpacingUsage({tokenName}: {tokenName: string}) {
+  const usage = summarizeSpacingUsage(spacingUsage[tokenName]);
+  if (!usage) {
+    return null;
+  }
+  return (
+    <Tooltip content={usage.detail}>
+      <Text type="supporting" color="secondary" maxLines={1}>
+        {usage.summary}
+      </Text>
+    </Tooltip>
+  );
+}
+
 function SpacingEditor({tokenName, value, onChange}: EditorProps) {
   const numValue = parseInt(value, 10);
   return (
     <TokenRow
       tokenName={tokenName}
+      description={<SpacingUsage tokenName={tokenName} />}
       preview={
         <div
           {...stylex.props(

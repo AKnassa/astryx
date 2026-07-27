@@ -65,6 +65,54 @@ export function getTokenLabel(tokenName: string): string {
 }
 
 /**
+ * Phrase which components a spacing token moves, for the editor's token rows.
+ *
+ * `components` are moved by any change to the token; `viaProps` are moved only
+ * where a spacing prop selects that rung, so the two are never merged into one
+ * count — a token with no default usage at all is a genuinely useful signal.
+ *
+ * Data comes from src/generated/spacingUsage.ts, derived from component source
+ * at build time (see scripts/generate-spacing-usage.mjs). Returns null when
+ * there is nothing to say, so callers can skip the row entirely.
+ */
+export function summarizeSpacingUsage(
+  usage: {components: string[]; viaProps: string[]} | undefined,
+  limit = 3,
+): {summary: string; detail: string} | null {
+  if (!usage) {
+    return null;
+  }
+  const {components, viaProps} = usage;
+  if (components.length === 0 && viaProps.length === 0) {
+    return null;
+  }
+
+  const plural = (n: number) => (n === 1 ? 'component' : 'components');
+  const viaPropsDetail =
+    viaProps.length === 0
+      ? ''
+      : `\n\nReachable on ${viaProps.length} more ${plural(viaProps.length)} ` +
+        `when a spacing prop selects it: ${viaProps.join(', ')}.`;
+
+  if (components.length === 0) {
+    return {
+      summary: 'Only via spacing props',
+      detail:
+        `No component uses this step by default.${viaPropsDetail}`.trimStart(),
+    };
+  }
+
+  const shown = components.slice(0, limit);
+  const rest = components.length - shown.length;
+  return {
+    summary: rest > 0 ? `${shown.join(', ')} +${rest} more` : shown.join(', '),
+    detail:
+      `Moves ${components.length} ${plural(components.length)} by default: ` +
+      `${components.join(', ')}.${viaPropsDetail}`,
+  };
+}
+
+/**
  * Build the `--spacing-*` token ramp from a base step: each token is
  * `round(base × step)px`. Token keys derive from the step (e.g. 0.5 → "0-5").
  */
@@ -240,8 +288,13 @@ export function generateThemeCode(
   return lines.join('\n');
 }
 
-export function getExpandedColorScale(accentHex: string): Record<string, string> {
-  const derived = expandColorScale({accent: accentHex}) as Record<string, string>;
+export function getExpandedColorScale(
+  accentHex: string,
+): Record<string, string> {
+  const derived = expandColorScale({accent: accentHex}) as Record<
+    string,
+    string
+  >;
   // Do not override the user's custom picker selection for `--color-accent` itself
   delete derived['--color-accent'];
   let hex = accentHex.replace('#', '');
