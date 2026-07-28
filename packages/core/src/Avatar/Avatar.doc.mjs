@@ -32,6 +32,18 @@ export const docs = {
       {className: 'astryx-avatar-status-dot', visualProps: ['variant']},
       {className: 'astryx-avatar-status-dot-glyph', visualProps: ['shape']},
     ],
+    vars: [
+      {name: '--_avatar-fallback-font-size', description: 'Initials font size; default is proportional to the avatar size (size × 0.4). Override per size tier (e.g. size:sm) for a custom type scale.', default: 'calc(avatar-size × 0.4)', private: true},
+      {name: '--_avatar-fallback-font-weight', description: 'Initials font weight', default: 'var(--font-weight-medium)', private: true},
+      {name: '--_avatar-fallback-color', description: 'Fallback text and default-icon color', default: 'var(--color-text-secondary)', private: true},
+      {name: '--_avatar-fallback-background', description: 'Fallback wash background fill', default: 'var(--color-neutral)', private: true},
+    ],
+    derived: [
+      {property: 'fontSize', vars: ['--_avatar-fallback-font-size']},
+      {property: 'fontWeight', vars: ['--_avatar-fallback-font-weight']},
+      {property: 'color', vars: ['--_avatar-fallback-color']},
+      {property: 'backgroundColor', vars: ['--_avatar-fallback-background']},
+    ],
   },
   description: 'Displays a user avatar with image, initials fallback, and optional status indicator.',
   props: [
@@ -82,6 +94,34 @@ export const docs = {
         "Tooltip shown on hover and keyboard focus. Omitted or true shows the avatar's name; a string shows that text instead; false shows no tooltip. Not auto-disabled when wrapped in your own Tooltip/HoverCard — set tooltip={false} if you supply your own overlay. No tooltip is shown when tooltip is true/omitted and there is no name.",
       default: 'true',
     },
+    {
+      name: 'href',
+      type: 'string',
+      description:
+        'When set, the avatar renders as an interactive link (`<a>` or a custom link component) pointing here — the same element-swap rule as Button. Requires a meaningful accessible name via `alt` or `name`. Inside an AvatarGroup, interactive avatars share a single Tab stop and are reached with arrow keys.',
+    },
+    {
+      name: 'as',
+      type: 'ElementType',
+      description:
+        'Custom link component used when `href` is set (e.g. Next.js `Link`). Overrides the provider-level LinkProvider default. Only applies with `href`.',
+    },
+    {
+      name: 'target',
+      type: 'string',
+      description: 'Link target attribute. Only applies with `href`.',
+    },
+    {
+      name: 'rel',
+      type: 'string',
+      description: 'Link rel attribute. Only applies with `href`.',
+    },
+    {
+      name: 'onClick',
+      type: '(e: MouseEvent) => void',
+      description:
+        'Click handler. When set without `href`, the avatar renders as a focusable `<button type="button">`. Requires a meaningful accessible name via `alt` or `name`.',
+    },
   ],
   components: [
     {name: 'AvatarStatusDot'},
@@ -125,6 +165,11 @@ export const docsDense = {
     status: 'corner content for status indicators',
     tooltip:
       "hover/focus tooltip. true/omitted → name; string → that text; false → none. Owns its tooltip; set false when wrapping in your own Tooltip/HoverCard. Default true.",
+    href: 'renders avatar as a link (<a>/custom). Needs alt/name. Button-style element swap.',
+    as: 'custom link component for href (e.g. Next Link). Only with href.',
+    target: 'link target. Only with href.',
+    rel: 'link rel. Only with href.',
+    onClick: 'click handler → renders <button> when no href. Needs alt/name.',
   },
   components: [
     {name: 'AvatarStatusDot', description: 'size-aware status indicator rendered in the Avatar corner'},

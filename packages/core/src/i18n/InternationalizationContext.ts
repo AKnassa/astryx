@@ -15,6 +15,8 @@
  * SYNC: When modified, update these files to stay in sync:
  * - /packages/core/src/i18n/InternationalizationProvider.tsx
  * - /packages/core/src/i18n/translator.ts
+ * - /packages/core/src/i18n/useDirection.ts
+ * - /packages/core/src/i18n/getLocaleDirection.ts
  * - /packages/core/src/i18n/index.ts
  */
 
@@ -24,6 +26,7 @@ import type {Locale, MessagesByLocale, Overrides} from './types';
 
 export interface InternationalizationContextValue {
   locale: Locale;
+  direction: 'ltr' | 'rtl';
   messages: MessagesByLocale;
   overrides?: Overrides;
   /**
@@ -44,6 +47,7 @@ export interface InternationalizationContextValue {
 export const InternationalizationContext =
   createContext<InternationalizationContextValue>({
     locale: 'en',
+    direction: 'ltr',
     messages: {},
   });
 InternationalizationContext.displayName = 'InternationalizationContext';

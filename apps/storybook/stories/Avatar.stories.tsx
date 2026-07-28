@@ -4,6 +4,7 @@ import type {Meta, StoryObj} from '@storybook/react';
 import * as stylex from '@stylexjs/stylex';
 import {Avatar} from '@astryxdesign/core/Avatar';
 import {AvatarStatusDot} from '@astryxdesign/core/Avatar';
+import {Theme, defineTheme} from '@astryxdesign/core/theme';
 import {
   spacingVars,
   typographyVars,
@@ -606,79 +607,54 @@ export const NumericSizes: Story = {
   ),
 };
 
-/**
- * By default, hovering (or keyboard-focusing) any named Avatar reveals its
- * `name` in a tooltip. No configuration required.
- */
-export const NameTooltip: Story = {
-  render: () => (
-    <div {...stylex.props(styles.storyWrapper)}>
-      <h4 {...stylex.props(styles.heading)}>
-        Default name tooltip (hover or focus each avatar)
-      </h4>
-      <div {...stylex.props(styles.row)}>
-        <Avatar
-          src="https://i.pravatar.cc/150?img=11"
-          name="Ada Lovelace"
-          size="lg"
-        />
-        <Avatar name="Grace Hopper" size="lg" />
-        <Avatar
-          src="https://i.pravatar.cc/150?img=12"
-          name="Katherine Johnson"
-          size="lg"
-        />
-      </div>
-    </div>
-  ),
-};
+// A theme can re-scope the fallback initials' typography per size tier via the
+// Avatar-scoped derived vars — a smaller-per-size type scale, regular weight,
+// and a muted secondary-text color on an accent wash fill — without forking the
+// component. The default row is unchanged (size × 0.4, medium weight, neutral
+// fill); only the themed row opts in.
+const fallbackScaleTheme = defineTheme({
+  name: 'avatar-fallback-scale',
+  components: {
+    avatar: {
+      base: {
+        fontWeight: 'var(--font-weight-normal)',
+        color: 'var(--color-text-secondary)',
+        backgroundColor: 'var(--color-accent-muted)',
+      },
+      'size:xsm': {fontSize: '8px'},
+      'size:sm': {fontSize: '9px'},
+      'size:md': {fontSize: '13px'},
+      'size:lg': {fontSize: '16px'},
+      'size:xl': {fontSize: '40px'},
+    },
+  },
+});
 
-/**
- * Pass a string to `tooltip` to show custom text instead of the `name` —
- * without wrapping the Avatar in a `Tooltip`. Handy when the display name
- * differs from a short handle, or when you want to add a role/title.
- */
-export const CustomTooltip: Story = {
+export const ThemedFallbackScale: Story = {
+  name: 'Themed Fallback Type Scale',
   render: () => (
     <div {...stylex.props(styles.storyWrapper)}>
-      <h4 {...stylex.props(styles.heading)}>Custom tooltip text</h4>
+      <h4 {...stylex.props(styles.heading)}>Default fallback (size × 0.4)</h4>
       <div {...stylex.props(styles.row)}>
-        <Avatar
-          src="https://i.pravatar.cc/150?img=13"
-          name="alovelace"
-          tooltip="Ada Lovelace — Mathematician"
-          size="lg"
-        />
-        <Avatar
-          name="ghopper"
-          tooltip="Grace Hopper — Rear Admiral"
-          size="lg"
-        />
+        <Avatar name="TY" size="xsm" />
+        <Avatar name="XS" size="sm" />
+        <Avatar name="SM" size="md" />
+        <Avatar name="MD" size="lg" />
+        <Avatar name="LG" size="xl" />
       </div>
-    </div>
-  ),
-};
 
-/**
- * Set `tooltip={false}` to opt out of the built-in name tooltip — for example
- * when you supply your own richer overlay (a `Tooltip` or `HoverCard`) around
- * the Avatar and don't want a second popup.
- */
-export const TooltipDisabled: Story = {
-  render: () => (
-    <div {...stylex.props(styles.storyWrapper)}>
       <h4 {...stylex.props(styles.heading)}>
-        Tooltip disabled (no popup on hover)
+        Themed fallback (per-size scale, regular weight, wash fill)
       </h4>
-      <div {...stylex.props(styles.row)}>
-        <Avatar
-          src="https://i.pravatar.cc/150?img=14"
-          name="Ada Lovelace"
-          tooltip={false}
-          size="lg"
-        />
-        <Avatar name="Grace Hopper" tooltip={false} size="lg" />
-      </div>
+      <Theme theme={fallbackScaleTheme} mode="light">
+        <div {...stylex.props(styles.row)}>
+          <Avatar name="TY" size="xsm" />
+          <Avatar name="XS" size="sm" />
+          <Avatar name="SM" size="md" />
+          <Avatar name="MD" size="lg" />
+          <Avatar name="LG" size="xl" />
+        </div>
+      </Theme>
     </div>
   ),
 };

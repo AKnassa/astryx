@@ -23,6 +23,7 @@
 
 import {useMemo, type ReactNode} from 'react';
 import {InternationalizationContext} from './InternationalizationContext';
+import {getLocaleDirection} from './getLocaleDirection';
 import type {Translator} from './translator';
 import type {Locale, MessagesByLocale, Overrides} from './types';
 
@@ -94,6 +95,13 @@ export interface InternationalizationProviderProps {
    * ```
    */
   translator?: Translator;
+  /**
+   * Optional explicit text direction override. When omitted, direction is derived
+   * from `locale` via `Intl.Locale.getTextInfo()`. Provide this to force a
+   * direction (e.g. RTL layout testing under an English catalog) or to skip the
+   * derivation when you already know the direction.
+   */
+  dir?: 'ltr' | 'rtl';
   children: ReactNode;
 }
 
@@ -106,11 +114,19 @@ export function InternationalizationProvider({
   messages,
   overrides,
   translator,
+  dir,
   children,
 }: InternationalizationProviderProps) {
+  const direction = dir ?? getLocaleDirection(locale);
   const value = useMemo(
-    () => ({locale, messages: messages ?? {}, overrides, translator}),
-    [locale, messages, overrides, translator],
+    () => ({
+      locale,
+      direction,
+      messages: messages ?? {},
+      overrides,
+      translator,
+    }),
+    [locale, direction, messages, overrides, translator],
   );
   return (
     <InternationalizationContext value={value}>
