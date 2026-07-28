@@ -396,6 +396,115 @@ describe('TreeList', () => {
   });
 
   // ===========================================================================
+  // Variant (guide lines)
+  // ===========================================================================
+
+  describe('variant', () => {
+    it('renders guide lines by default', () => {
+      const {container} = render(<TreeList items={nestedItemsExpanded} />);
+      expect(container.querySelector('.astryx-tree-list-guide')).not.toBeNull();
+    });
+
+    it("variant='lineGuides' renders guide lines (explicit == default)", () => {
+      const {container} = render(
+        <TreeList items={nestedItemsExpanded} variant="lineGuides" />,
+      );
+      expect(container.querySelector('.astryx-tree-list-guide')).not.toBeNull();
+    });
+
+    it("variant='noGuides' renders NO guide lines", () => {
+      const {container} = render(
+        <TreeList items={nestedItemsExpanded} variant="noGuides" />,
+      );
+      expect(container.querySelector('.astryx-tree-list-guide')).toBeNull();
+    });
+
+    it("variant='noGuides' preserves the tree structure and items", () => {
+      render(<TreeList items={nestedItemsExpanded} variant="noGuides" />);
+      // Rows, roles, and nesting are all intact — only the connectors are gone.
+      expect(screen.getByRole('tree')).toBeInTheDocument();
+      expect(screen.getAllByRole('treeitem')).toHaveLength(4);
+      expect(screen.getByText('Parent')).toBeInTheDocument();
+      expect(screen.getByText('Child 1')).toBeInTheDocument();
+      expect(screen.getByText('Child 2')).toBeInTheDocument();
+      expect(screen.getByText('Sibling')).toBeInTheDocument();
+    });
+
+    it("variant='noGuides' preserves per-level indentation on the rows", () => {
+      // Indentation lives on the row's margin-inline-start (not the guide
+      // element), so it must survive when the connectors are suppressed. A
+      // deeper row is indented more than a shallower one.
+      const {container} = render(
+        <TreeList items={deepItems} variant="noGuides" />,
+      );
+      const marginOf = (text: string): string => {
+        const li = screen.getByText(text).closest('li')!;
+        const styled = li.querySelector('[style*="margin-inline-start"]');
+        return styled?.getAttribute('style') ?? '';
+      };
+      // Guides are gone…
+      expect(container.querySelector('.astryx-tree-list-guide')).toBeNull();
+      // …but each level still carries an inline margin-inline-start, and the
+      // level multiplier grows with depth (0, 1, 2).
+      expect(marginOf('Root')).toContain('margin-inline-start');
+      expect(marginOf('Mid')).toContain('margin-inline-start');
+      expect(marginOf('Leaf')).toContain('margin-inline-start');
+      const level = (text: string): number => {
+        const m = /calc\((\d+)/.exec(marginOf(text));
+        return m ? Number(m[1]) : NaN;
+      };
+      expect(level('Mid')).toBeGreaterThan(level('Root'));
+      expect(level('Leaf')).toBeGreaterThan(level('Mid'));
+    });
+  });
+
+  // ===========================================================================
+  // Guide theme target
+  // ===========================================================================
+
+  describe('guide theme target', () => {
+    it('renders the astryx-tree-list-guide target on the connector lines', () => {
+      const {container} = render(<TreeList items={nestedItemsExpanded} />);
+      const guide = container.querySelector('.astryx-tree-list-guide');
+      // A dedicated, stable target so a theme can recolor or hide the guides
+      // without hiding the built-in connectors and reimplementing them.
+      expect(guide).not.toBeNull();
+    });
+
+    it('exposes tree-list-guide as a themeable defineTheme target', () => {
+      // jsdom cannot resolve the @layer cascade, so the generated CSS is what
+      // proves a theme override reaches the guide element.
+      const theme = defineTheme({
+        name: 'tree-list-guide-test',
+        components: {
+          'tree-list-guide': {
+            base: {backgroundColor: 'var(--color-accent)'},
+          },
+        },
+      });
+      const css = generateThemeCSSFlat(theme);
+      expect(css).toContain('.astryx-tree-list-guide {');
+      expect(css).toContain('background-color: var(--color-accent)');
+    });
+
+    it('lets a theme hide the guides via display: none on the target', () => {
+      // Hiding the guides is done through the theme target, not a prop — the
+      // theme rule lands in @layer astryx-theme, above StyleX's base layer.
+      const theme = defineTheme({
+        name: 'tree-list-guide-hidden-test',
+        components: {
+          'tree-list-guide': {
+            base: {display: 'none'},
+          },
+        },
+      });
+      const css = generateThemeCSSFlat(theme);
+      expect(css).toContain('.astryx-tree-list-guide {');
+      expect(css).toContain('display: none');
+    });
+  });
+
+  // ===========================================================================
   // xds class name
   // ===========================================================================
 
