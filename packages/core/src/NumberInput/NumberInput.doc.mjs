@@ -42,7 +42,14 @@ export const docs = {
       name: 'changeAction',
       type: '(value: number) => void | Promise<void>',
       description:
-        'Async action fired after onChange. Wrapped in a React transition so the field shows the new number optimistically while the action is pending. With hasClear, it also receives null.',
+        'Async action fired after onChange. Wrapped in a React transition so the field shows the new number optimistically while the action is pending, and fires once per committed value even if blur re-reaches the same number. With hasClear, it also receives null.',
+    },
+    {
+      name: 'isLoading',
+      type: 'boolean',
+      description:
+        'Puts the input in a loading state, showing a spinner and setting aria-busy. An in-flight changeAction sets the same state on its own.',
+      default: 'false',
     },
     {
       name: 'size',
@@ -268,7 +275,14 @@ export const docsZh = {
       name: 'changeAction',
       type: '(value: number) => void | Promise<void>',
       description:
-        '在 onChange 之后触发的异步操作。包装在 React transition 中，操作挂起时输入框会乐观地显示新数值。启用 hasClear 时也会接收 null。',
+        '在 onChange 之后触发的异步操作。包装在 React transition 中，操作挂起时输入框会乐观地显示新数值；即使失焦再次到达同一数值，每个提交值也只触发一次。启用 hasClear 时也会接收 null。',
+    },
+    {
+      name: 'isLoading',
+      type: 'boolean',
+      description:
+        '使输入框进入加载状态，显示旋转器并设置 aria-busy。进行中的 changeAction 会自动设置相同状态。',
+      default: 'false',
     },
     {
       name: 'size',
@@ -526,7 +540,9 @@ export const docsDense = {
     value: 'Current input value.',
     onChange: 'Callback on valid input change.',
     changeAction:
-      'Async action after onChange; transition-wrapped for optimistic display.',
+      'Async action after onChange; transition-wrapped for optimistic display. Fires once per committed value.',
+    isLoading:
+      'Loading state w/ spinner+aria-busy. In-flight changeAction sets it too.',
     size: 'Size variant.',
     isLabelHidden: 'Visually hide label (still accessible to screen readers).',
     description: 'Text between label + input.',
