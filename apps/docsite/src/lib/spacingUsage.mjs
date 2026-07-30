@@ -38,6 +38,16 @@
  *
  * The discriminator is exact rather than heuristic: scale rungs are keyed by
  * numeric literals (`0`, `0.5`, `2`), fixed styles by names (`base`, `sm`).
+ *
+ * ## Scope and assumed conventions
+ *
+ * Only packages/core/src is scanned: the Theme Editor's component gallery is
+ * core, and packages/lab is experimental by definition. The import graph
+ * assumes core's own conventions — named imports/exports only. Namespace
+ * imports (`import * as`) and `export *` barrels are not followed; core has
+ * none for style modules, and the inverse-grep test in
+ * src/__tests__/spacing-usage.test.ts fails loudly if a component's refs stop
+ * being attributed through a shape this module cannot see.
  */
 
 import * as fs from 'node:fs';
@@ -255,9 +265,11 @@ export function analyzeSource(sourceText, fileName) {
       if (!clause || clause.isTypeOnly) continue;
       const bindings = clause.namedBindings;
       if (!bindings || !ts.isNamedImports(bindings)) continue;
+      // The source-side name (`shared` in `import {shared as mine}`), because
+      // the export lookup that follows the graph runs on it.
       const names = bindings.elements
         .filter(el => !el.isTypeOnly)
-        .map(el => el.name.text);
+        .map(el => el.propertyName?.text ?? el.name.text);
       if (names.length === 0) continue;
       imports.push({from: statement.moduleSpecifier.text, names});
       continue;
@@ -267,11 +279,13 @@ export function analyzeSource(sourceText, fileName) {
       if (statement.isTypeOnly || !statement.moduleSpecifier) continue;
       const clause = statement.exportClause;
       if (!clause || !ts.isNamedExports(clause)) continue;
-      const names = clause.elements
-        .filter(el => !el.isTypeOnly)
-        .map(el => el.name.text);
+      // `export {innerStyles as outerStyles}`: consumers ask for the exported
+      // name, the next hop must be looked up by the source name.
+      const elements = clause.elements.filter(el => !el.isTypeOnly);
+      const names = elements.map(el => el.name.text);
       if (names.length === 0) continue;
-      reexports.push({from: statement.moduleSpecifier.text, names});
+      const sources = elements.map(el => el.propertyName?.text ?? el.name.text);
+      reexports.push({from: statement.moduleSpecifier.text, names, sources});
       continue;
     }
 
@@ -336,13 +350,15 @@ function listSources(dir, acc = []) {
 
 /**
  * The component a file belongs to: the top-level directory under
- * packages/core/src, when that directory is a component (PascalCase).
+ * packages/core/src, when that directory is a component (PascalCase). A file
+ * sitting at the root itself (BaseProps.ts) belongs to no component.
  *
  * @returns {string | undefined}
  */
 function componentOf(relativePath) {
-  const [dir] = relativePath.split(path.sep);
-  return /^[A-Z]/.test(dir) ? dir : undefined;
+  const parts = relativePath.split(path.sep);
+  if (parts.length < 2) return undefined;
+  return /^[A-Z]/.test(parts[0]) ? parts[0] : undefined;
 }
 
 /** Resolve a relative module specifier to a file in the index. */
@@ -361,8 +377,9 @@ function resolveModule(fromFile, specifier, byPath) {
 }
 
 /**
- * Find the refs for an exported binding, following one barrel hop — the shape
- * Field/index.ts uses to re-export inputWrapperStyles from inputStyles.stylex.
+ * Find the refs for an exported binding, following re-export chains (the
+ * shape Field/index.ts uses for inputWrapperStyles) — cycle-safe, and by
+ * source-side name across renaming hops.
  */
 function exportedRefs(file, name, byPath, seen = new Set()) {
   if (seen.has(`${file}#${name}`)) return undefined;
@@ -372,10 +389,11 @@ function exportedRefs(file, name, byPath, seen = new Set()) {
   const direct = analysis.exports.get(name);
   if (direct) return direct;
   for (const reexport of analysis.reexports) {
-    if (!reexport.names.includes(name)) continue;
+    const index = reexport.names.indexOf(name);
+    if (index === -1) continue;
     const target = resolveModule(file, reexport.from, byPath);
     if (!target) continue;
-    const refs = exportedRefs(target, name, byPath, seen);
+    const refs = exportedRefs(target, reexport.sources[index], byPath, seen);
     if (refs) return refs;
   }
   return undefined;
@@ -435,6 +453,14 @@ export function deriveSpacingUsage(coreSrcDir) {
     (scale ? entry.viaProps : entry.components).add(component);
   }
 
+  /** Record refs against a component, unless an ownerVar names its owner. */
+  function recordAll(refs, own) {
+    for (const ref of refs) {
+      const owner = ref.ownerVar ? resolveOwner(ref.ownerVar) : undefined;
+      record(ref.token, owner ?? own, ref.scale);
+    }
+  }
+
   for (const file of files) {
     const analysis = byPath.get(file);
     const own = componentOf(path.relative(root, file));
@@ -442,22 +468,22 @@ export function deriveSpacingUsage(coreSrcDir) {
     // Module-local styles can only affect the file that declares them, except
     // where the value flows through a public `--astryx-<component>-*` property,
     // which names its owner outright (see core naming.ts).
-    for (const ref of analysis.local) {
-      const owner = ref.ownerVar ? resolveOwner(ref.ownerVar) : undefined;
-      record(ref.token, owner ?? own, ref.scale);
-    }
+    recordAll(analysis.local, own);
 
     // Exported style objects belong to whoever applies them.
     for (const {from, names} of analysis.imports) {
       const target = resolveModule(file, from, byPath);
       if (!target) continue;
+      // A module outside every component directory (hooks/) cannot
+      // self-credit its local styles, yet its markup renders inside whatever
+      // mounts it — so those refs flow to the importer.
+      if (!componentOf(path.relative(root, target))) {
+        recordAll(byPath.get(target).local, own);
+      }
       for (const name of names) {
         const refs = exportedRefs(target, name, byPath);
         if (!refs) continue;
-        for (const ref of refs) {
-          const owner = ref.ownerVar ? resolveOwner(ref.ownerVar) : undefined;
-          record(ref.token, owner ?? own, ref.scale);
-        }
+        recordAll(refs, own);
       }
     }
   }
@@ -475,4 +501,62 @@ export function deriveSpacingUsage(coreSrcDir) {
     result[token] = {components, viaProps};
   }
   return result;
+}
+
+const MODULE_HEADER = `// Copyright (c) Meta Platforms, Inc. and affiliates.
+
+// @generated by scripts/generate-spacing-usage.mjs — do not edit manually
+
+/**
+ * Which components a spacing token moves.
+ *
+ * - \`components\` — the token is used in a fixed style. Changing it moves
+ *   these components with no props involved.
+ * - \`viaProps\` — the token is one rung of a prop-keyed scale (Stack's
+ *   \`gap\`, Card's \`padding\`). Changing it moves these components only where
+ *   that prop value is actually passed.
+ */
+export interface SpacingUsage {
+  components: string[];
+  viaProps: string[];
+}`;
+
+/**
+ * Render the generated TypeScript module for a derived usage map.
+ *
+ * Refuses an empty map: the generator must fail the build loudly rather than
+ * ship a valid but blank module — the silent-under-report failure mode this
+ * feature exists to prevent.
+ *
+ * @param {Record<string, {components: string[], viaProps: string[]}>} usage
+ * @returns {string}
+ */
+export function renderSpacingUsageModule(usage) {
+  const entries = Object.entries(usage);
+  if (entries.length === 0) {
+    throw new Error(
+      'deriveSpacingUsage found no spacing usage — refusing to render an ' +
+        'empty map; the derivation or its source dir is broken',
+    );
+  }
+  const list = names =>
+    names.length === 0 ? '[]' : `[${names.map(n => `'${n}'`).join(', ')}]`;
+  const body = entries
+    .map(([token, {components, viaProps}]) =>
+      [
+        `  '${token}': {`,
+        `    components: ${list(components)},`,
+        `    viaProps: ${list(viaProps)},`,
+        `  },`,
+      ].join('\n'),
+    )
+    .join('\n');
+  return [
+    MODULE_HEADER,
+    '',
+    'export const spacingUsage: Record<string, SpacingUsage> = {',
+    body,
+    '};',
+    '',
+  ].join('\n');
 }

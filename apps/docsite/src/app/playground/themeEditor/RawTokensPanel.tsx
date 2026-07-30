@@ -74,6 +74,9 @@ const s = stylex.create({
   inputLg: {
     width: 200,
   },
+  usageDetail: {
+    whiteSpace: 'pre-line',
+  },
 });
 
 const dynamic = stylex.create({
@@ -131,8 +134,18 @@ function SpacingUsage({tokenName}: {tokenName: string}) {
     return null;
   }
   return (
-    <Tooltip content={usage.detail}>
-      <Text type="supporting" color="secondary" maxLines={1}>
+    // pre-line keeps the detail's paragraph break; the summary Text is the
+    // tooltip trigger, so its own truncation tooltip is off (it would stack a
+    // second layer over this one) and tabIndex makes the detail reachable by
+    // keyboard — focusTrigger 'auto' only binds naturally-focusable elements.
+    <Tooltip
+      content={<span {...stylex.props(s.usageDetail)}>{usage.detail}</span>}>
+      <Text
+        type="supporting"
+        color="secondary"
+        maxLines={1}
+        hasTruncateTooltip={false}
+        tabIndex={0}>
         {usage.summary}
       </Text>
     </Tooltip>
