@@ -2,7 +2,7 @@
 
 /**
  * @file FieldStatus.tsx
- * @input Uses React, stylex, theme tokens, useAnnounce
+ * @input Uses React, stylex, theme tokens, useAnnounce, Icon
  * @output Exports FieldStatus component, FieldStatusProps
  * @position Core implementation; consumed by Field, Switch, CheckboxInput, and the FieldStatus entrypoint
  *
@@ -31,6 +31,19 @@ import {
 import type {InputStatusType} from '../Field/types';
 import {useEntryAnimation} from '../hooks/useEntryAnimation';
 import {themeProps} from '../utils/themeProps';
+import {Icon} from '../Icon';
+import type {IconName} from '../Icon';
+
+/**
+ * Maps each status type to its status glyph. Mirrors the mapping the input
+ * controls already use for the on-field status affordance, so the detached
+ * message shows the same icon a consumer sees elsewhere for that status.
+ */
+const statusIconMap: Record<InputStatusType, IconName> = {
+  warning: 'warning',
+  error: 'error',
+  success: 'success',
+};
 
 const styles = stylex.create({
   base: {
@@ -51,6 +64,20 @@ const styles = stylex.create({
     paddingBlock: spacingVars['--spacing-2'],
     paddingInline: spacingVars['--spacing-2'],
     borderRadius: radiusVars['--radius-element'],
+  },
+  detachedContent: {
+    display: 'flex',
+    alignItems: 'flex-start',
+    gap: spacingVars['--spacing-1'],
+  },
+  detachedIcon: {
+    // Center the glyph within the first text-line box so it aligns to the
+    // first line of the message (rather than the top of the flex row) when the
+    // message wraps to multiple lines.
+    display: 'inline-flex',
+    alignItems: 'center',
+    height: `calc(${typeScaleVars['--text-supporting-size']} * ${typeScaleVars['--text-supporting-leading']})`,
+    flexShrink: 0,
   },
 });
 
@@ -85,6 +112,7 @@ const colorStyles = stylex.create({
 export interface FieldStatusVariantMap {
   attached: true;
   detached: true;
+  tooltip: true;
 }
 
 /**
@@ -113,6 +141,15 @@ export interface FieldStatusProps extends BaseProps<HTMLDivElement> {
 
 /**
  * A status message component for form fields.
+ *
+ * The `detached` variant renders a leading status icon before the message so
+ * status is not conveyed by color or position alone (WCAG 1.4.1). The icon is
+ * decorative for assistive tech (`aria-hidden`): the message text already names
+ * the status in words and is announced through the live region. The `attached`
+ * variant keeps its status affordance on the bordered input, so it renders no
+ * icon here to avoid a duplicate. The `tooltip` variant renders no message box
+ * at all — the input surfaces the status through a tooltip on its on-field
+ * icon — so callers skip rendering FieldStatus for it.
  *
  * Screen-reader announcements go through the persistent `useAnnounce` live
  * regions (assertive for errors, polite otherwise) rather than `role`/
@@ -176,7 +213,16 @@ export function FieldStatus({
         className,
         style,
       )}>
-      {message}
+      {variant === 'detached' ? (
+        <span {...stylex.props(styles.detachedContent)}>
+          <span {...stylex.props(styles.detachedIcon)}>
+            <Icon icon={statusIconMap[type]} size="sm" color="inherit" />
+          </span>
+          <span>{message}</span>
+        </span>
+      ) : (
+        message
+      )}
     </div>
   );
 }

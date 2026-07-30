@@ -110,6 +110,16 @@ export default defineConfig({
           name: 'node',
           globals: true,
           environment: 'node',
+          // Several CLI suites spawn a fresh `node bin/astryx.mjs` per assertion
+          // (real process boundary). Under the forks pool these cold-starts can
+          // run long on a busy box; the 5s default testTimeout then flakes
+          // non-deterministically (every failure was "timed out in 5000ms").
+          // Give spawn-backed tests + their fixture hooks a real budget so a
+          // slow-but-correct run never trips the timeout. (The other half of the
+          // fix was removing a full `pnpm build` that scripts/build-css.test ran
+          // in-suite, which hogged every core and starved these — see that file.)
+          testTimeout: 30_000,
+          hookTimeout: 30_000,
           // Build @astryxdesign/core once before workers fork. The build-theme
           // suites need a compiled core; doing it here (not per-suite in
           // parallel workers) avoids concurrent `rimraf dist && build`

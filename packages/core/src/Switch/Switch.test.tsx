@@ -68,6 +68,28 @@ describe('Switch', () => {
     expect(screen.getByRole('switch')).toBeChecked();
   });
 
+  it('renders with custom size prop (sm / md)', () => {
+    const {rerender} = render(
+      <Switch
+        label="Small switch"
+        value={false}
+        size="sm"
+        onChange={() => {}}
+      />,
+    );
+    expect(screen.getByRole('switch')).toBeInTheDocument();
+
+    rerender(
+      <Switch
+        label="Medium switch"
+        value={false}
+        size="md"
+        onChange={() => {}}
+      />,
+    );
+    expect(screen.getByRole('switch')).toBeInTheDocument();
+  });
+
   it('calls onChange with new checked state when clicked', async () => {
     const user = userEvent.setup();
     const handleChange = vi.fn();

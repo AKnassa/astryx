@@ -30,6 +30,9 @@ export const docs = {
       {className: 'astryx-tree-list-item-label', states: ['selected']},
       {className: 'astryx-tree-list-guide'},
     ],
+    vars: [
+      {name: '--tree-list-indent', description: 'Per-level indentation step. Each nesting level indents its rows by this distance, and the guide lines follow it so they stay aligned. Set it on the `tree-list` target to retune the metric (e.g. `var(--spacing-5)` for a wider indent).', default: 'var(--spacing-4)'},
+    ],
   },
   components: [
     {
@@ -49,6 +52,13 @@ export const docs = {
           type: "'compact' | 'balanced' | 'spacious'",
           description: 'Spacing density for items.',
           default: "'balanced'",
+        },
+        {
+          name: 'variant',
+          type: "'lineGuides' | 'noGuides'",
+          description:
+            'Visual treatment of the hierarchy guide lines. lineGuides shows connector lines; noGuides hides them, keeping indentation. Orthogonal to density.',
+          default: "'lineGuides'",
         },
         {
           name: 'header',
@@ -97,6 +107,9 @@ export const docsZh = {
       {className: 'astryx-tree-list-item-label', states: ['selected']},
       {className: 'astryx-tree-list-guide'},
     ],
+    vars: [
+      {name: '--tree-list-indent', description: '每级缩进步长。每个嵌套层级的行按此距离缩进，引导线随之对齐。在 `tree-list` 目标上设置以调整该度量（例如用 `var(--spacing-5)` 获得更宽的缩进）。', default: 'var(--spacing-4)'},
+    ],
   },
   components: [
     {
@@ -117,6 +130,13 @@ export const docsZh = {
           type: "'compact' | 'balanced' | 'spacious'",
           description: '项目的间距密度。',
           default: "'balanced'",
+        },
+        {
+          name: 'variant',
+          type: "'lineGuides' | 'noGuides'",
+          description:
+            '层级引导线的视觉呈现。lineGuides 显示连接线；noGuides 隐藏连接线并保留缩进。与 density 正交。',
+          default: "'lineGuides'",
         },
         {
           name: 'header',
@@ -162,6 +182,7 @@ export const docsDense = {
   propDescriptions: {
     items: 'Recursive tree item data w/ id, label, optional children + isExpanded.',
     density: 'Spacing density for items.',
+    variant: 'Guide-line treatment: lineGuides shows connectors, noGuides hides them (indent kept). Orthogonal to density.',
     header: 'Header content, linked to tree via aria-labelledby.',
     xstyle: 'StyleX styles for layout. Must be stylex.create() value.',
   },
@@ -173,6 +194,7 @@ export const docsDense = {
       propDescriptions: {
         items: 'Recursive tree item data w/ id, label, optional children + isExpanded.',
         density: 'Spacing density for items.',
+        variant: 'Guide-line treatment: lineGuides shows connectors, noGuides hides them (indent kept). Orthogonal to density.',
         header: 'Header content, linked to tree via aria-labelledby.',
         xstyle: 'StyleX styles for layout. Must be stylex.create() value.',
       },

@@ -1,6 +1,6 @@
 {
   "name": "@astryxdesign/core",
-  "version": "0.1.8",
+  "version": "0.1.9",
   "displayName": "Astryx Core",
   "description": "The component library. Accessible, themeable React components with built-in spacing, dark mode, and StyleX styling.",
   "author": "Meta Open Source",
@@ -53,6 +53,11 @@
     "./tailwind-theme.css": {
       "types": "./src/tailwind-theme.css.d.ts",
       "default": "./src/tailwind-theme.css"
+    },
+    "./BaseProps": {
+      "source": "./src/BaseProps.ts",
+      "types": "./dist/BaseProps.d.ts",
+      "default": "./dist/BaseProps.js"
     },
     "./naming": {
       "source": "./src/naming.ts",

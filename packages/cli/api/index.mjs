@@ -24,11 +24,13 @@ export {docs} from './docs/docs.mjs';
 export {blog} from './blog/blog.mjs';
 export {discover} from './discover/discover.mjs';
 export {template} from './template/template.mjs';
-export {themeAdd, listThemes} from './theme/theme-add.mjs';
+export {themeBuild, themeAdd, themeList, listThemes} from './theme/theme.mjs';
 export {hook} from './hook/hook.mjs';
 export {search} from './search/search.mjs';
 export {build} from './build/build.mjs';
 export {swizzle} from './swizzle/swizzle.mjs';
+export {upgrade} from './upgrade/upgrade.mjs';
+export {init} from './init/init.mjs';
 export {doctor} from './doctor/doctor.mjs';
 export {layoutExpand, layoutCheck, layoutGrammar} from './layout/layout.mjs';
 export {
