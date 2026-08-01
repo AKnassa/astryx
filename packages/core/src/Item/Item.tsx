@@ -43,18 +43,19 @@ export type ItemAlign = 'center' | 'start';
 export type ItemDensity = 'compact' | 'balanced' | 'spacious';
 
 /**
- * Surface treatment for Item. Shares Card's background and border tokens so
- * themes style the two consistently, but keeps Item's element-scale radius
- * (`--radius-element`) rather than Card's container radius.
+ * Surface treatment for Item. The surfaced variants share Card's background
+ * and border tokens so themes style the two consistently, but keep Item's
+ * element-scale radius (`--radius-element`) rather than Card's container
+ * radius.
  *
- * - `default`: card background with a visible border — mirrors Card `default`
+ * - `transparent`: no background, no border — paints only on hover/selected
  * - `outline`: visible border, no background fill
  * - `muted`: muted background, no border — mirrors Card `muted`
  *
- * Omitting the prop keeps Item transparent, which is the right default for the
+ * `transparent` is the default: a standing surface would be surprising in the
  * lists and menus Item is mostly used in.
  */
-export type ItemVariant = 'default' | 'outline' | 'muted';
+export type ItemVariant = 'transparent' | 'outline' | 'muted';
 
 export interface ItemProps extends BaseProps<HTMLElement> {
   /** Ref forwarded to the root element. */
@@ -109,11 +110,10 @@ export interface ItemProps extends BaseProps<HTMLElement> {
   density?: ItemDensity;
 
   /**
-   * Surface treatment: `default` (card background + border), `outline`
-   * (border only), or `muted` (muted background, no border). Uses Card's
-   * tokens at Item's element radius.
-   *
-   * Opt-in — omit it to keep Item transparent.
+   * Surface treatment: `transparent` (no surface), `outline` (border only),
+   * or `muted` (muted background, no border). The surfaced variants use
+   * Card's tokens at Item's element radius.
+   * @default 'transparent'
    */
   variant?: ItemVariant;
 
@@ -220,7 +220,7 @@ const styles = stylex.create({
     display: 'flex',
     alignItems: 'center',
     gap: spacingVars['--spacing-2'],
-    // Values come from the density styles below; the bordered variants subtract
+    // Values come from the density styles below; the outline variant subtracts
     // the border width from these same vars.
     paddingInline: 'var(--_item-padding-inline)',
     paddingBlock: 'var(--_item-padding-block)',
@@ -236,8 +236,8 @@ const styles = stylex.create({
   // background-color, so they composite *over* the variant surface (which owns
   // background-color) instead of replacing it. Without this, `muted` would show
   // no hover at all — --color-background-muted and --color-overlay-hover are the
-  // same value in light mode — and `default` would lose its opaque card surface
-  // on hover. Same technique as TreeListItem and AvatarGroupOverflow.
+  // same value in light mode. Same technique as TreeListItem and
+  // AvatarGroupOverflow.
   interactive: {
     cursor: 'pointer',
     transitionProperty: 'background-image',
@@ -368,7 +368,7 @@ const dynamicStyles = stylex.create({
 });
 
 // Each density publishes its padding as local custom properties (consumed by
-// `root`) so the bordered variants can subtract the border width from whichever
+// `root`) so the outline variant can subtract the border width from whichever
 // padding is in play, without duplicating a density × variant matrix.
 const densityStyles = stylex.create({
   compact: {
@@ -387,10 +387,8 @@ const densityStyles = stylex.create({
 
 // Variant surfaces own background-color — the layer *below* the interaction
 // overlays. Card's tokens, so themes style Item and Card consistently.
+// `transparent` paints nothing, so it has no entry here.
 const variantStyles = stylex.create({
-  default: {
-    backgroundColor: colorVars['--color-background-card'],
-  },
   outline: {
     backgroundColor: 'transparent',
   },
@@ -428,7 +426,7 @@ export function Item({
   endContent,
   align = 'center',
   density = 'balanced',
-  variant,
+  variant = 'transparent',
   labelLines,
   descriptionLines,
   onClick,
@@ -626,14 +624,14 @@ export function Item({
           styles.root,
           densityStyles[density],
           align === 'start' && styles.alignStart,
-          variant != null && variantStyles[variant],
+          variant !== 'transparent' && variantStyles[variant],
           isInteractive && styles.interactive,
           isInteractive && styles.focusVisibleOutline,
           isHighlighted && styles.highlighted,
           isSelected && styles.selected,
           // After the density padding so the border-inset calc wins; it reads
           // the --_item-padding-* vars published above.
-          (variant === 'default' || variant === 'outline') && styles.withBorder,
+          variant === 'outline' && styles.withBorder,
           isDisabled && !hasParentRole && styles.disabled,
           xstyle,
         ),

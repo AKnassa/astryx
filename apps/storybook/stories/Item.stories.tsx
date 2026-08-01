@@ -38,7 +38,7 @@ const meta: Meta<typeof Item> = {
   argTypes: {
     align: {control: 'select', options: ['center', 'start']},
     density: {control: 'select', options: ['compact', 'balanced', 'spacious']},
-    variant: {control: 'select', options: ['default', 'outline', 'muted']},
+    variant: {control: 'select', options: ['transparent', 'outline', 'muted']},
   },
 };
 
@@ -264,18 +264,16 @@ export const Disabled: Story = {
 };
 
 /**
- * Surface variants. `variant` is opt-in — an Item without it stays transparent,
- * which is what lists and menus want. The three variants share Card's tokens but
- * keep Item's element-scale radius.
+ * Surface variants. `transparent` is the default — an Item without the prop
+ * paints no surface, which is what lists and menus want. The surfaced variants
+ * share Card's tokens but keep Item's element-scale radius.
  */
 export const Variants: Story = {
   render: () => (
     <Stack gap={2}>
-      <Item label="No variant" description="Transparent — the default" />
       <Item
-        variant="default"
-        label="default"
-        description="Card background with a visible border"
+        label="transparent"
+        description="No surface — the default, shown here without the prop"
       />
       <Item
         variant="outline"
@@ -299,8 +297,7 @@ export const VariantsInteractive: Story = {
   render: () => (
     <Stack gap={2}>
       <Item
-        variant="default"
-        label="Clickable default"
+        label="Clickable transparent"
         description="Hover me"
         onClick={() => {}}
       />

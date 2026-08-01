@@ -609,14 +609,16 @@ describe('Item', () => {
     );
   });
 
-  it('omits the variant data attribute when no variant is set', () => {
-    expect(renderItem({})).not.toHaveAttribute('data-variant');
+  it('reflects transparent as the default variant, mirroring Card', () => {
+    // Like Card's `default`, the default variant is a first-class value:
+    // always reflected so themes can target the resting state.
+    expect(renderItem({})).toHaveAttribute('data-variant', 'transparent');
   });
 
-  it('paints the card background for the default variant', () => {
-    expect(baseCss(renderItem({variant: 'default'}))).toContain(
-      'background-color: var(--color-background-card)',
-    );
+  it('paints no surface for the transparent variant', () => {
+    const css = baseCss(renderItem({variant: 'transparent'}));
+    expect(css).not.toContain('background-color:');
+    expect(css).not.toContain('border-style: solid');
   });
 
   it('paints the muted background for the muted variant', () => {
@@ -625,17 +627,11 @@ describe('Item', () => {
     );
   });
 
-  it('draws a border for the default variant', () => {
-    const css = baseCss(renderItem({variant: 'default'}));
-    expect(css).toContain('border-style: solid');
-    expect(css).toContain('border-color: var(--color-border-emphasized)');
-    expect(css).toContain('border-width: var(--border-width)');
-  });
-
-  it('draws a border for the outline variant without the card background', () => {
+  it('draws a border for the outline variant without a background fill', () => {
     const css = baseCss(renderItem({variant: 'outline'}));
     expect(css).toContain('border-style: solid');
     expect(css).toContain('border-color: var(--color-border-emphasized)');
+    expect(css).toContain('border-width: var(--border-width)');
     expect(css).not.toContain('background-color: var(--color-background-card)');
   });
 
@@ -645,17 +641,22 @@ describe('Item', () => {
     );
   });
 
-  it('leaves a no-variant item without border or background surface', () => {
+  it('leaves an item without the variant prop surface-free, as before', () => {
     const css = baseCss(renderItem({}));
     expect(css).not.toContain('border-style: solid');
-    expect(css).not.toContain('background-color: var(--color-background-card)');
-    expect(css).not.toContain(
-      'background-color: var(--color-background-muted)',
-    );
+    expect(css).not.toContain('background-color:');
+  });
+
+  it('rejects the removed filled-card variant at the type level', () => {
+    // The aligned set is transparent/outline/muted — there is no
+    // bordered-and-filled surface (#4277 review).
+    // @ts-expect-error -- 'default' is not an ItemVariant
+    const rejected = <Item label="x" variant="default" />;
+    void rejected;
   });
 
   it('subtracts the border width from padding so the inset stays on the spacing scale', () => {
-    const css = baseCss(renderItem({variant: 'default'}));
+    const css = baseCss(renderItem({variant: 'outline'}));
     // Longhands, so they outrank the shorthand padding StyleX gives lower
     // specificity — same technique as Card's withBorder.
     for (const side of [
@@ -673,7 +674,7 @@ describe('Item', () => {
   });
 
   it('keeps element radius on a bordered variant rather than container radius', () => {
-    const css = baseCss(renderItem({variant: 'default'}));
+    const css = baseCss(renderItem({variant: 'outline'}));
     expect(css).toContain('border-radius: var(--radius-element)');
     expect(css).not.toContain('--radius-container');
   });
@@ -682,10 +683,10 @@ describe('Item', () => {
   //
   // --color-background-muted and --color-overlay-hover are byte-identical in
   // light mode (both light-dark(#0536590C, ...)). So a hover that writes
-  // background-color would give a muted Item *zero* hover feedback, and would
-  // strip the opaque surface off a default Item. The overlays therefore ride on
-  // background-image (a separate layer painted above background-color) — the
-  // same technique used by TreeListItem and AvatarGroupOverflow.
+  // background-color would give a muted Item *zero* hover feedback. The
+  // overlays therefore ride on background-image (a separate layer painted
+  // above background-color) — the same technique used by TreeListItem and
+  // AvatarGroupOverflow.
 
   it('layers the hover overlay above the variant surface instead of replacing it', () => {
     const el = renderItem({variant: 'muted', onClick: () => {}});
