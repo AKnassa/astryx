@@ -1176,6 +1176,234 @@ describe('Tokenizer', () => {
         expect(politeRegion()).toHaveTextContent('Added 3 items');
       });
     });
+
+    it('does not create tokens from a paste while focusable-disabled', async () => {
+      // In disabledMessage mode the input stays focusable (aria-disabled +
+      // readOnly). readOnly blocks change events but not paste events, so the
+      // paste path needs its own disabled guard.
+      const user = userEvent.setup();
+      const onChange = vi.fn();
+      render(
+        <Tokenizer
+          label="Tags"
+          searchSource={emptySource}
+          value={[]}
+          onChange={onChange}
+          hasCreate
+          isDisabled
+          disabledMessage="You need edit access"
+          debounceMs={0}
+        />,
+      );
+      const input = screen.getByRole('combobox');
+      await user.click(input);
+      await user.paste('alice,bob');
+      expect(onChange).not.toHaveBeenCalled();
+      expect(input).toHaveValue('');
+    });
+
+    it('composes a paste with text already typed at the caret', async () => {
+      // Pasting "gent,x" after typing "ur" must behave like the input read
+      // "urgent,x" — not split the clipboard alone and strand the "ur".
+      const user = userEvent.setup();
+      const onChange = vi.fn();
+      render(
+        <Tokenizer
+          label="Tags"
+          searchSource={emptySource}
+          value={[]}
+          onChange={onChange}
+          hasCreate
+          debounceMs={0}
+        />,
+      );
+      const input = screen.getByRole('combobox');
+      await user.click(input);
+      await act(async () => {
+        fireEvent.change(input, {target: {value: 'ur'}});
+      });
+      await user.paste('gent,x');
+      expect(onChange).toHaveBeenCalledTimes(1);
+      const [items] = onChange.mock.calls[0];
+      expect(items.map((i: SearchableItem) => i.label)).toEqual([
+        'urgent',
+        'x',
+      ]);
+      expect(input).toHaveValue('');
+    });
+
+    it('replaces selected text on paste instead of resurrecting it', async () => {
+      // Select-all + paste must honor the replacement: the selected text is
+      // gone, only the pasted values commit, and nothing lingers for a later
+      // Enter to create.
+      const user = userEvent.setup();
+      const onChange = vi.fn();
+      render(
+        <Tokenizer
+          label="Tags"
+          searchSource={emptySource}
+          value={[]}
+          onChange={onChange}
+          hasCreate
+          debounceMs={0}
+        />,
+      );
+      const input = screen.getByRole('combobox');
+      if (!(input instanceof HTMLInputElement)) {
+        throw new Error('expected the combobox to be an <input>');
+      }
+      await user.click(input);
+      await act(async () => {
+        fireEvent.change(input, {target: {value: 'foo'}});
+      });
+      input.setSelectionRange(0, 3);
+      await user.paste('bar,baz');
+      expect(onChange).toHaveBeenCalledTimes(1);
+      const [items] = onChange.mock.calls[0];
+      expect(items.map((i: SearchableItem) => i.label)).toEqual(['bar', 'baz']);
+      expect(input).toHaveValue('');
+    });
+
+    it('handles a CR-only paste (classic Mac / Excel-for-Mac list)', async () => {
+      const user = userEvent.setup();
+      const onChange = vi.fn();
+      render(
+        <Tokenizer
+          label="Tags"
+          searchSource={emptySource}
+          value={[]}
+          onChange={onChange}
+          hasCreate
+          debounceMs={0}
+        />,
+      );
+      const input = screen.getByRole('combobox');
+      await user.click(input);
+      await user.paste('alice\rbob');
+      expect(onChange).toHaveBeenCalledTimes(1);
+      const [items] = onChange.mock.calls[0];
+      expect(items.map((i: SearchableItem) => i.label)).toEqual([
+        'alice',
+        'bob',
+      ]);
+      expect(input).toHaveValue('');
+    });
+
+    it('waits out an IME composition, then splits the final text', async () => {
+      // Mid-composition text is not final — no commit may happen while the
+      // IME is open. But Chrome and Safari fire no further change event after
+      // compositionend, so the final text must be split when composition ends
+      // or a delimiter committed via IME never splits at all.
+      const onChange = vi.fn();
+      render(
+        <Tokenizer
+          label="Tags"
+          searchSource={emptySource}
+          value={[]}
+          onChange={onChange}
+          hasCreate
+          debounceMs={0}
+        />,
+      );
+      const input = screen.getByRole('combobox');
+      await act(async () => {
+        fireEvent.focus(input);
+        fireEvent.compositionStart(input);
+      });
+      await act(async () => {
+        fireEvent.input(input, {target: {value: 'a,b'}, isComposing: true});
+      });
+      expect(onChange).not.toHaveBeenCalled();
+      expect(input).toHaveValue('a,b');
+      await act(async () => {
+        fireEvent.compositionEnd(input);
+      });
+      expect(onChange).toHaveBeenCalledTimes(1);
+      const [items] = onChange.mock.calls[0];
+      expect(items.map((i: SearchableItem) => i.label)).toEqual(['a', 'b']);
+      expect(input).toHaveValue('');
+    });
+
+    it('a stale in-flight search cannot re-arm Enter after a delimiter commit', async () => {
+      // With hasEntriesOnFocus the query-cleared branch schedules a bootstrap
+      // but (before the fix) never invalidated the in-flight search; its late
+      // results reopened the dropdown with a highlighted item and Enter
+      // committed a value the user never chose.
+      vi.useFakeTimers();
+      try {
+        const onChange = vi.fn();
+        let resolveSearch: ((r: SearchableItem[]) => void) | undefined;
+        const source: SearchSource = {
+          search: async () =>
+            new Promise<SearchableItem[]>(resolve => {
+              resolveSearch = resolve;
+            }),
+          bootstrap: () => [],
+        };
+        render(
+          <Tokenizer
+            label="Tags"
+            searchSource={source}
+            value={[]}
+            onChange={onChange}
+            hasCreate
+            hasEntriesOnFocus
+            debounceMs={150}
+          />,
+        );
+        const input = screen.getByRole('combobox');
+        await act(async () => {
+          fireEvent.focus(input);
+        });
+        await act(async () => {
+          fireEvent.change(input, {target: {value: 'ab'}});
+        });
+        await act(async () => {
+          vi.advanceTimersByTime(150);
+        });
+        // search('ab') is now in flight; commit the value with a delimiter.
+        await act(async () => {
+          fireEvent.change(input, {target: {value: 'ab,'}});
+        });
+        expect(onChange).toHaveBeenCalledTimes(1);
+        // Stale results land inside the bootstrap debounce window.
+        await act(async () => {
+          resolveSearch?.([{id: 'abigail', label: 'abigail'}]);
+        });
+        await act(async () => {
+          fireEvent.keyDown(input, {key: 'Enter'});
+        });
+        expect(onChange).toHaveBeenCalledTimes(1);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('a delimited paste at maxEntries creates nothing', async () => {
+      const onChange = vi.fn();
+      render(
+        <Tokenizer
+          label="Tags"
+          searchSource={emptySource}
+          value={[
+            {id: 'a', label: 'a'},
+            {id: 'b', label: 'b'},
+          ]}
+          onChange={onChange}
+          hasCreate
+          maxEntries={2}
+          debounceMs={0}
+        />,
+      );
+      const input = screen.getByRole('combobox');
+      await act(async () => {
+        input.focus();
+        fireEvent.paste(input, {
+          clipboardData: {getData: () => 'c,d'},
+        });
+      });
+      expect(onChange).not.toHaveBeenCalled();
+    });
   });
 
   describe('popover after selection', () => {

@@ -102,7 +102,7 @@ export const docs = {
     {
       name: 'transformQuery',
       type: '(nextQuery: string) => string',
-      description: 'Rewrites edited input text before it becomes the query. Called with the value the input is about to take; the return value is used instead. Runs before the query is stored, before onChangeQuery, and before a search is scheduled, so returning shorter text never searches for the text it replaced. Not called for query changes the component makes itself (e.g. the clear after a selection) or while an IME is mid-composition. Tokenizer uses it to lift delimited values out of the input and commit them as tokens.',
+      description: 'Rewrites edited input text before it becomes the query. Called with the value the input is about to take; the return value is used instead. Runs before the query is stored, before onChangeQuery, and before a search is scheduled, so returning shorter text never searches for the text it replaced. On paste it receives the full post-paste value (clipboard spliced over the selection) before the single-line input strips newlines; returning different text replaces the native insertion. After an IME composition ends it runs over the finalized text. Not called for query changes the component makes itself (e.g. the clear after a selection) or while an IME is mid-composition. Tokenizer uses it to lift delimited values out of the input and commit them as tokens.',
     },
     {
       name: 'onChangeQuery',
@@ -216,7 +216,7 @@ export const docsZh = {
     {
       name: 'transformQuery',
       type: '(nextQuery: string) => string',
-      description: 'Rewrites edited input text before it becomes the query. Called with the value the input is about to take; the return value is used instead. Runs before the query is stored, before onChangeQuery, and before a search is scheduled. Not called for query changes the component makes itself or while an IME is mid-composition. Tokenizer uses it to lift delimited values out of the input and commit them as tokens.',
+      description: '在编辑文本成为查询之前重写它。以输入框即将取得的值调用，返回值将被采用。在查询存储、onChangeQuery 触发和搜索调度之前运行。粘贴时以粘贴后的完整文本（剪贴板内容替换选区）调用，先于单行输入框剥离换行符；返回不同文本会取代原生插入。输入法组合结束后对最终文本再运行一次。组件自身引起的查询变化（如选择后的清空）和输入法组合过程中不会调用。Tokenizer 用它把分隔的值从输入框提取为标记。',
     },
     {
       name: 'onChangeQuery',
@@ -270,7 +270,7 @@ export const docsDense = {
     anchorRef: 'Anchor for dropdown positioning. Defaults to input.',
     inputXStyle: 'Additional StyleX styles for input.',
     onKeyDown: 'Keydown before internal nav. preventDefault() skips internal handling.',
-    transformQuery: 'Rewrites edited input text before it becomes the query (runs before store/onChangeQuery/search; not for self-made query changes or mid-IME). Tokenizer uses it to split delimited values into tokens.',
+    transformQuery: 'Rewrites edited input text before it becomes the query (runs before store/onChangeQuery/search; on paste gets the composed post-paste value pre-newline-strip; runs on IME text at composition end; not for self-made query changes or mid-IME). Tokenizer uses it to split delimited values into tokens.',
     onChangeQuery: 'Fired on query text change.',
     onOpenChange: 'Fired on dropdown open/close.',
     inputId: 'Input ID for label association.',

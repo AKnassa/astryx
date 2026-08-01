@@ -326,8 +326,8 @@ export const Creatable: Story = {
           placeholder="Type or paste a list of tags..."
         />
         <p style={{marginTop: 8, fontSize: 14, color: '#666'}}>
-          {tags.length} tag{tags.length !== 1 ? 's' : ''} added — type a comma
-          or paste a comma-separated list to add several at once
+          {tags.length} tag{tags.length !== 1 ? 's' : ''} added. Type a comma or
+          paste a comma-separated list to add several at once.
         </p>
       </div>
     );
@@ -419,8 +419,8 @@ export const CreatableCommaValues: Story = {
           delimiters={[]}
           placeholder='Type e.g. "Smith, John" and press Enter...'
         />
-        <p style={{marginTop: 8, fontSize: 14, color: '#666'}}>
-          Commas stay part of the value — {value.length} added
+        <p style={{marginTop: 8, fontSize: 14, opacity: 0.72}}>
+          Commas stay part of the value. {value.length} added.
         </p>
       </div>
     );
@@ -449,8 +449,8 @@ export const CreatableCustomDelimiters: Story = {
           delimiters={[',', ';', '\n']}
           placeholder="Paste a comma- or semicolon-separated list..."
         />
-        <p style={{marginTop: 8, fontSize: 14, color: '#666'}}>
-          {value.length} added — splits on comma, semicolon, or newline
+        <p style={{marginTop: 8, fontSize: 14, opacity: 0.72}}>
+          {value.length} added. Splits on comma, semicolon, or newline.
         </p>
       </div>
     );

@@ -211,10 +211,13 @@ export interface TokenizerProps<T extends SearchableItem> extends Omit<
    * Whenever the input text contains a delimiter — typed at the end of a value,
    * or arriving in one shot from a paste — the text is read as a list: every
    * value is trimmed, blanks and values already selected are dropped, and each
-   * remaining value becomes a token, up to `maxEntries`. The input is left
-   * empty afterwards, so nothing is committed twice. Text with no delimiter in
-   * it passes through untouched, so pasting a single value still offers the
-   * "Create" option and still waits for Enter.
+   * remaining value becomes a token, up to `maxEntries`. A paste is read
+   * together with what the input already holds — the clipboard is spliced over
+   * the selection, exactly as the browser would insert it — and text composed
+   * with an input method is read when the composition ends, never mid-way.
+   * The input is left empty afterwards, so nothing is committed twice. Text
+   * with no delimiter in it passes through untouched, so pasting a single
+   * value still offers the "Create" option and still waits for Enter.
    *
    * Delimiter strings match literally — regex characters such as `.` need no
    * escaping — and longer strings are matched before shorter ones, so
@@ -229,7 +232,11 @@ export interface TokenizerProps<T extends SearchableItem> extends Omit<
    * Do that when a value may legitimately contain a comma, such as a name
    * written `"Smith, John"` or a company written `"Acme, Inc."`.
    *
-   * @default [',', '\n']
+   * The default is comma plus newline in both flavors, so comma lists and
+   * spreadsheet columns split no matter which platform wrote the clipboard
+   * (LF, CRLF, or classic-Mac CR).
+   *
+   * @default [',', '\n', '\r']
    */
   delimiters?: ReadonlyArray<string> | RegExp;
   /** Query change callback. */
@@ -363,11 +370,18 @@ const layerPlaceholderSizeStyles = stylex.create({
 const CREATABLE_ID_PREFIX = '__xds_create__';
 
 // Default delimiter set for free-text creation: comma and newline, so pasting
-// a comma- or newline-separated list "just works" when hasCreate is on. Frozen
-// and shared so the destructure default keeps a stable identity across renders
+// a comma- or newline-separated list "just works" when hasCreate is on. CR is
+// included alongside LF because clipboard text from Excel for Mac and other
+// legacy-Mac sources separates rows with bare \r (CRLF still splits cleanly:
+// the empty segment between \r and \n is dropped as a blank). Frozen and
+// shared so the destructure default keeps a stable identity across renders
 // (a fresh literal would thrash the delimiterPattern memo). Space is
 // deliberately excluded — it would split ordinary multi-word values.
-const DEFAULT_DELIMITERS: ReadonlyArray<string> = Object.freeze([',', '\n']);
+const DEFAULT_DELIMITERS: ReadonlyArray<string> = Object.freeze([
+  ',',
+  '\n',
+  '\r',
+]);
 
 /**
  * Multi-select input with token chips and typeahead search.
@@ -674,6 +688,12 @@ export function Tokenizer<T extends SearchableItem>({
         // still offers "Create" and waits for Enter.
         return text;
       }
+      if (isDisabled) {
+        // Belt over BaseTypeahead's own disabled guards: a focusable-disabled
+        // (readOnly) input still fires paste events, and this path must never
+        // mutate a disabled control.
+        return text;
+      }
       if (isAtMax) {
         // At capacity, swallow nothing: leave the text visible rather than
         // silently dropping a paste on a field that can accept no more.
@@ -720,6 +740,7 @@ export function Tokenizer<T extends SearchableItem>({
     },
     [
       delimiterPattern,
+      isDisabled,
       isAtMax,
       selectedIds,
       value,
@@ -727,28 +748,6 @@ export function Tokenizer<T extends SearchableItem>({
       onChange,
       announce,
     ],
-  );
-
-  // Intercept delimited pastes from the clipboard directly. A single-line
-  // <input> strips newline characters on paste (HTML value sanitization), so a
-  // newline-separated list (e.g. a spreadsheet column) would never reach
-  // transformQuery — reading clipboardData here catches it before the strip.
-  // preventDefault stops the browser's own insertion, so no change event fires
-  // and commitDelimitedText runs exactly once. A paste with no delimiter is
-  // left alone, so the normal "Create" flow still handles a single value.
-  const handlePaste = useCallback(
-    (e: React.ClipboardEvent<HTMLElement>) => {
-      if (isAtMax) {
-        return;
-      }
-      const text = e.clipboardData.getData('text');
-      if (splitOnDelimiters(text, delimiterPattern) == null) {
-        return;
-      }
-      e.preventDefault();
-      commitDelimitedText(text);
-    },
-    [isAtMax, delimiterPattern, commitDelimitedText],
   );
 
   // Handle removing an item. Single removal path: both Backspace on an empty
@@ -916,7 +915,6 @@ export function Tokenizer<T extends SearchableItem>({
         ariaDescribedBy={ariaDescribedBy}
         onChangeQuery={onChangeQuery}
         transformQuery={hasCreate ? commitDelimitedText : undefined}
-        onPaste={hasCreate ? handlePaste : undefined}
         debounceMs={debounceMs}
         onKeyDown={handleKeyDown}
         anchorRef={wrapperRef}

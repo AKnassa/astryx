@@ -126,6 +126,30 @@ describe('splitOnDelimiters', () => {
     expect(() => splitOnDelimiters('abc', /,*/)).not.toThrow();
   });
 
+  it('treats a pattern that only zero-width-matches as no delimiter', () => {
+    // /,*/ (a plausible mistyping of /,+/) matches empty at every position.
+    // An empty match delimits nothing — reporting "delimiter found" here
+    // would tokenize every keystroke into single-character tokens.
+    expect(splitOnDelimiters('abc', /,*/)).toBeNull();
+    expect(splitOnDelimiters('abc', /\s*/)).toBeNull();
+  });
+
+  it('splits on the real matches of a zero-width-capable pattern', () => {
+    // Where /,*/ does consume text it behaves like /,+/ — the empty matches
+    // between characters contribute no extra segments.
+    expect(splitOnDelimiters('a,b', /,*/)).toEqual(['a', 'b']);
+    expect(splitOnDelimiters('a,,b', /,*/)).toEqual(['a', 'b']);
+  });
+
+  it('terminates on astral text under a u-flag zero-width-capable pattern', () => {
+    // Skipping an empty match one code UNIT at a time lands mid-surrogate,
+    // where a u-flag regex re-matches empty at the same code point — the loop
+    // never advances (frozen tab). The skip must step a whole code point.
+    expect(splitOnDelimiters('💥x', /,?/u)).toBeNull();
+    expect(splitOnDelimiters('💥,x', /,?/u)).toEqual(['💥', 'x']);
+    expect(splitOnDelimiters('a💥b,c', /,*/u)).toEqual(['a💥b', 'c']);
+  });
+
   it('gives the same result twice for a shared RegExp instance (lastIndex reset)', () => {
     const shared = /[,\n]/g;
     const first = splitOnDelimiters('a,b', shared);

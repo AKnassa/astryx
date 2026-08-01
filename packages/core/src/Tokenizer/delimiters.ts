@@ -61,7 +61,9 @@ export function toDelimiterPattern(
  * rather than `String.prototype.split`, so a caller-supplied RegExp with a
  * capturing group never emits the delimiter itself as a segment. A shared
  * RegExp instance is safe to reuse — `lastIndex` is reset on entry — and a
- * pattern that can match the empty string is prevented from looping forever.
+ * zero-width match never counts as a delimiter: an empty match delimits
+ * nothing, so a zero-width-capable pattern such as `,*` splits exactly where
+ * `,+` would and reports "no delimiter" on text it never consumes.
  */
 export function splitOnDelimiters(
   text: string,
@@ -83,14 +85,19 @@ export function splitOnDelimiters(
   let matched = false;
   let match: RegExpExecArray | null;
   while ((match = re.exec(text)) !== null) {
+    // A zero-width match delimits nothing: counting it would make a pattern
+    // like /,*/ report "delimiter found" on every string and tokenize each
+    // keystroke into single characters. Skip it — advancing a whole code
+    // point, because stepping into the middle of a surrogate pair livelocks
+    // the exec loop under the u flag.
+    if (match[0].length === 0) {
+      const cp = text.codePointAt(re.lastIndex);
+      re.lastIndex += cp !== undefined && cp > 0xffff ? 2 : 1;
+      continue;
+    }
     matched = true;
     segments.push(text.slice(cursor, match.index));
     cursor = match.index + match[0].length;
-    // Zero-width match guard: advance past the empty match so the loop cannot
-    // spin on a pattern that matches the empty string.
-    if (match[0].length === 0) {
-      re.lastIndex++;
-    }
   }
   if (!matched) {
     return null;

@@ -31,7 +31,7 @@ export const docs = {
       name: 'onChange',
       type: '(items: T[], change: TokenizerChange<T>) => void',
       description:
-        "Called when selection changes. The change argument includes the affected item and type ('add' | 'create' | 'remove' | 'reorder'). Additions and removals (including Backspace on an empty input) are announced to screen readers via a polite live region.",
+        "Called when selection changes. The change argument includes the affected item and type ('add' | 'create' | 'remove' | 'reorder'). When a delimited entry creates several tokens in one commit, change.items carries the full batch and change.item is the last of them. Additions and removals (including Backspace on an empty input) are announced to screen readers via a polite live region.",
       required: true,
     },
     {
@@ -162,10 +162,10 @@ export const docs = {
     },
     {
       name: 'delimiters',
-      type: 'string[] | RegExp',
+      type: 'ReadonlyArray<string> | RegExp',
       description:
-        'Characters or patterns that commit the typed text as a token — like Enter, but mid-typing and on paste. Only active with hasCreate. A delimited value (typed at the end of a value, or pasted as a list) is split into one token per trimmed, non-empty, non-duplicate value, up to maxEntries; text with no delimiter still offers "Create" and waits for Enter. Strings match literally (no escaping); a RegExp is matched as written, ignoring capture groups. Pass [] to disable splitting when a value may contain a comma, e.g. "Smith, John".',
-      default: "[',', '\\n']",
+        'Characters or patterns that commit the typed text as a token, like Enter but mid-typing and on paste. Only active with hasCreate. A delimited value (typed at the end of a value, or pasted as a list) is split into one token per trimmed, non-empty, non-duplicate value, up to maxEntries. A paste is read together with the text already in the input, and IME text is read once the composition ends. Text with no delimiter still offers "Create" and waits for Enter. Strings match literally (no escaping); a RegExp is matched as written, ignoring capture groups. Pass [] to disable splitting when a value may contain a comma, e.g. "Smith, John".',
+      default: "[',', '\\n', '\\r']",
     },
     {
       name: 'onChangeQuery',
@@ -252,7 +252,7 @@ export const docsZh = {
       name: 'onChange',
       type: '(items: T[], change: TokenizerChange<T>) => void',
       description:
-        "\u9009\u62e9\u53d8\u66f4\u65f6\u8c03\u7528\u3002change \u53c2\u6570\u5305\u542b\u53d7\u5f71\u54cd\u7684\u9879\u76ee\u548c\u7c7b\u578b\uff08'add' | 'create' | 'remove' | 'reorder'\uff09\u3002",
+        "\u9009\u62e9\u53d8\u66f4\u65f6\u8c03\u7528\u3002change \u53c2\u6570\u5305\u542b\u53d7\u5f71\u54cd\u7684\u9879\u76ee\u548c\u7c7b\u578b\uff08'add' | 'create' | 'remove' | 'reorder'\uff09\u3002\u5f53\u4e00\u6b21\u63d0\u4ea4\u901a\u8fc7\u5206\u9694\u7b26\u521b\u5efa\u591a\u4e2a\u6807\u8bb0\u65f6\uff0cchange.items \u643a\u5e26\u5b8c\u6574\u6279\u6b21\uff0cchange.item \u4e3a\u5176\u4e2d\u6700\u540e\u4e00\u4e2a\u3002",
       required: true,
     },
     {
@@ -375,10 +375,10 @@ export const docsZh = {
     },
     {
       name: 'delimiters',
-      type: 'string[] | RegExp',
+      type: 'ReadonlyArray<string> | RegExp',
       description:
-        'Characters or patterns that commit the typed text as a token \u2014 like Enter, but mid-typing and on paste. Only active with hasCreate. A delimited value (typed at the end of a value, or pasted as a list) is split into one token per trimmed, non-empty, non-duplicate value, up to maxEntries; text with no delimiter still offers "Create" and waits for Enter. Strings match literally (no escaping); a RegExp is matched as written, ignoring capture groups. Pass [] to disable splitting when a value may contain a comma, e.g. "Smith, John".',
-      default: "[',', '\\n']",
+        '\u5c06\u5df2\u8f93\u5165\u6587\u672c\u63d0\u4ea4\u4e3a\u6807\u8bb0\u7684\u5b57\u7b26\u6216\u6a21\u5f0f\uff0c\u6548\u679c\u7b49\u540c Enter\uff0c\u4f46\u5728\u8f93\u5165\u8fc7\u7a0b\u4e2d\u548c\u7c98\u8d34\u65f6\u751f\u6548\u3002\u4ec5\u5728 hasCreate \u5f00\u542f\u65f6\u6709\u6548\u3002\u542b\u5206\u9694\u7b26\u7684\u6587\u672c\uff08\u5728\u503c\u672b\u5c3e\u8f93\u5165\u6216\u6574\u4f53\u7c98\u8d34\uff09\u6309\u503c\u62c6\u5206\uff0c\u6bcf\u4e2a\u503c\u53bb\u9664\u9996\u5c3e\u7a7a\u767d\u3001\u8df3\u8fc7\u7a7a\u767d\u503c\u548c\u91cd\u590d\u503c\u540e\u5404\u6210\u4e3a\u4e00\u4e2a\u6807\u8bb0\uff0c\u53d7 maxEntries \u9650\u5236\u3002\u7c98\u8d34\u4f1a\u4e0e\u8f93\u5165\u6846\u4e2d\u5df2\u6709\u6587\u672c\u5408\u5e76\u5904\u7406\uff0c\u8f93\u5165\u6cd5\u6587\u672c\u5728\u7ec4\u5408\u7ed3\u675f\u540e\u5904\u7406\u3002\u4e0d\u542b\u5206\u9694\u7b26\u7684\u6587\u672c\u4fdd\u6301\u539f\u6837\uff0c\u4ecd\u663e\u793a "Create" \u5e76\u7b49\u5f85 Enter\u3002\u5b57\u7b26\u4e32\u6309\u5b57\u9762\u5339\u914d\uff08\u65e0\u9700\u8f6c\u4e49\uff09\uff1bRegExp \u6309\u539f\u6837\u5339\u914d\uff0c\u5ffd\u7565\u6355\u83b7\u7ec4\u3002\u5f53\u503c\u672c\u8eab\u53ef\u80fd\u5305\u542b\u9017\u53f7\uff08\u5982 "Smith, John"\uff09\u65f6\u4f20 [] \u5173\u95ed\u62c6\u5206\u3002',
+      default: "[',', '\\n', '\\r']",
     },
     {
       name: 'onChangeQuery',
@@ -457,7 +457,7 @@ export const docsDense = {
     value: 'Array of currently selected items.',
     onChange: "Fired on selection change. Change arg includes affected item+type ('add'|'create'|'remove'|'reorder'); a delimited paste that creates 2+ tokens sets change.items to the full batch.",
     hasCreate: 'Enable free-text token creation. Shows "Create" dropdown option for unmatched typed text.',
-    delimiters: 'Chars/RegExp that commit typed text as a token (like Enter, mid-typing+on paste). hasCreate only. Splits a delimited value/paste into one token per trimmed, non-empty, non-dupe value, up to maxEntries. Strings match literally; RegExp ignores capture groups. [] disables splitting (e.g. "Smith, John"). Default [",", "\\n"].',
+    delimiters: 'Chars/RegExp that commit typed text as a token (like Enter, mid-typing+on paste). hasCreate only. Splits a delimited value/paste into one token per trimmed, non-empty, non-dupe value, up to maxEntries; paste composes with existing input text, IME text splits at composition end. Strings match literally; RegExp ignores capture groups. [] disables splitting (e.g. "Smith, John"). Default [",", "\\n", "\\r"].',
     placeholder: 'Input placeholder. Only shown when no tokens selected.',
     maxEntries: 'Max selections allowed. Input hidden at limit.',
     hasClear: 'Clear-all button for bulk removal.',
