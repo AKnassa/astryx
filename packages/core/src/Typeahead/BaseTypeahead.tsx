@@ -158,6 +158,16 @@ export interface BaseTypeaheadProps<T extends SearchableItem> extends Omit<
   inputXStyle?: StyleXStyles;
 
   /**
+   * Tab-order override for the input element. Typeahead passes `-1` while
+   * its selected-value token is shown: the input is visually collapsed
+   * (width 0 / opacity 0) but must stay programmatically focusable for
+   * token edit/clear interactions, so removing it from the Tab order is
+   * what prevents an invisible tab stop (WCAG 2.4.3 / 2.4.7). The input
+   * remains focusable via `.focus()` regardless of this value.
+   */
+  inputTabIndex?: number;
+
+  /**
    * Ref to the anchor element for dropdown positioning.
    * The dropdown will be positioned relative to this element.
    * If not provided, the input itself is used as the anchor.
@@ -254,7 +264,7 @@ const styles = stylex.create({
     outline: 'none',
     backgroundColor: 'transparent',
     border: 'none',
-    textAlign: 'left',
+    textAlign: 'start',
   },
   itemHighlighted: {
     backgroundColor: colorVars['--color-overlay-hover'],
@@ -340,6 +350,7 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
   ariaDescribedBy,
   ariaLabelledBy,
   inputXStyle,
+  inputTabIndex,
   anchorRef,
   onKeyDown: externalOnKeyDown,
   onPaste,
@@ -457,7 +468,7 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
         resultsGenRef.current = gen;
         const shown = searchResults.slice(0, maxMenuItems);
         setResults(shown);
-        setHighlightedIndex(searchResults.length > 0 ? 0 : -1);
+        setHighlightedIndex(shown.length > 0 ? 0 : -1);
         if (searchResults.length > 0 || searchQuery.length > 0) {
           showLayer();
         }
@@ -495,8 +506,9 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
         return;
       }
       resultsGenRef.current = gen;
-      setResults(bootstrapResults.slice(0, maxMenuItems));
-      setHighlightedIndex(bootstrapResults.length > 0 ? 0 : -1);
+      const shown = bootstrapResults.slice(0, maxMenuItems);
+      setResults(shown);
+      setHighlightedIndex(shown.length > 0 ? 0 : -1);
       if (bootstrapResults.length > 0) {
         showLayer();
       }
@@ -729,15 +741,19 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
       switch (e.key) {
         case 'ArrowDown':
           e.preventDefault();
-          setHighlightedIndex(prev =>
-            prev < results.length - 1 ? prev + 1 : 0,
-          );
+          if (results.length > 0) {
+            setHighlightedIndex(prev =>
+              prev < results.length - 1 ? prev + 1 : 0,
+            );
+          }
           break;
         case 'ArrowUp':
           e.preventDefault();
-          setHighlightedIndex(prev =>
-            prev > 0 ? prev - 1 : results.length - 1,
-          );
+          if (results.length > 0) {
+            setHighlightedIndex(prev =>
+              prev > 0 ? prev - 1 : results.length - 1,
+            );
+          }
           break;
         case 'Enter':
           e.preventDefault();
@@ -752,13 +768,17 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
         case 'Home':
           if (popover.isOpen) {
             e.preventDefault();
-            setHighlightedIndex(0);
+            if (results.length > 0) {
+              setHighlightedIndex(0);
+            }
           }
           break;
         case 'End':
           if (popover.isOpen) {
             e.preventDefault();
-            setHighlightedIndex(results.length - 1);
+            if (results.length > 0) {
+              setHighlightedIndex(results.length - 1);
+            }
           }
           break;
       }
@@ -786,13 +806,17 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
   // cursor walks off-screen once navigation passes the visible window. Mirrors
   // CommandPaletteItem's scrollIntoView({block: 'nearest'}) behavior.
   useEffect(() => {
-    if (!popover.isOpen || highlightedIndex < 0) {
+    if (
+      !popover.isOpen ||
+      highlightedIndex < 0 ||
+      highlightedIndex >= results.length
+    ) {
       return;
     }
     document
       .getElementById(getItemId(highlightedIndex))
       ?.scrollIntoView?.({block: 'nearest'});
-  }, [popover.isOpen, highlightedIndex, getItemId]);
+  }, [popover.isOpen, highlightedIndex, getItemId, results.length]);
 
   const selectedKey =
     value == null ? null : getKey(value.id, () => results.indexOf(value));
@@ -817,7 +841,9 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
         aria-expanded={popover.isOpen}
         aria-controls={listboxId}
         aria-activedescendant={
-          popover.isOpen && highlightedIndex >= 0
+          popover.isOpen &&
+          highlightedIndex >= 0 &&
+          highlightedIndex < results.length
             ? getItemId(highlightedIndex)
             : undefined
         }
@@ -825,6 +851,7 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
         aria-describedby={ariaDescribedBy}
         aria-labelledby={ariaLabelledBy}
         aria-disabled={isFocusableDisabled ? 'true' : undefined}
+        tabIndex={inputTabIndex}
         value={query}
         onChange={handleInputChange}
         onPointerDown={() => {

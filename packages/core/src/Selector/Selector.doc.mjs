@@ -23,6 +23,8 @@ export const docs = {
     targets: [
       {className: 'astryx-selector', visualProps: ['size', 'status']},
       {className: 'astryx-selector-option'},
+      {className: 'astryx-selector-clear-icon'},
+      {className: 'astryx-selector-indicator-icon', states: ['state']},
     ],
   },
   description: 'Dropdown selector for choosing from a list of options.',
@@ -129,10 +131,23 @@ export const docs = {
       description: 'Validation status with an optional message.',
     },
     {
+      name: 'statusVariant',
+      type: "'attached' | 'detached'",
+      description:
+        'How the status message is placed relative to the input. attached overlaps directly below the input (bordered treatment); detached floats below as a separate element with spacing.',
+      default: "'attached'",
+    },
+    {
       name: 'renderOption',
       type: '(option: SelectorOptionData) => ReactNode',
       description:
         'Custom render function for each selectable option in the dropdown. Use this instead of JSX children; dividers and sections are rendered by the selector.',
+    },
+    {
+      name: 'width',
+      type: 'SizeValue',
+      description:
+        'Width of the field (number = pixels, string used as-is, e.g. "100%"). Sizes the whole field (label, control, and status) so they stay aligned.',
     },
     {
       name: 'xstyle',

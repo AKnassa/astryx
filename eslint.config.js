@@ -60,10 +60,20 @@ export default defineConfig(
       // (see the dedicated CLI block lower down). Scoped to packages/cli on
       // purpose — other packages' .mjs stay unlinted (#2468).
       "**/*.mjs",
-      "!packages/cli/src/**/*.mjs",
+      "!packages/cli/api/**/*.mjs",
+      "!packages/cli/cli/**/*.mjs",
+      "!packages/cli/codemods/**/*.mjs",
+      "!packages/cli/authoring/**/*.mjs",
+      "!packages/cli/lib/**/*.mjs",
+      "!packages/cli/utils/**/*.mjs",
+      "!packages/cli/schemas/**/*.mjs",
       "!packages/cli/bin/**/*.mjs",
       "**/*.test-violations.tsx",
       "apps/example-nextjs/*.js",
+      // Generated declaration files (e.g. the CLI's `./api` type surface emitted
+      // from JSDoc by `sync:api-types` at prepack). Like `**/*.d.ts`, these are
+      // build artifacts — not hand-authored source to lint.
+      "**/*.d.mts",
       "**/next-env.d.ts",
       "**/.next/**",
       "apps/example-nextjs-source/*.js",
@@ -173,6 +183,16 @@ export default defineConfig(
           'MetadataList/MetadataList',
           'Carousel/Carousel',
         ],
+      }],
+      // announce() live-region messages are user-facing text; the rule checks
+      // them as call arguments (callees defaults to ['announce']).
+      // TEMPORARY allowlist: these exact strings predate the check and are
+      // being replaced with t(...) in the scan #3 i18n sweep PRs
+      // (CodeBlock 'Copied'; MultiSelector 'Selection cleared' /
+      // 'All selected'). Remove each entry as its fix merges; delete
+      // allowedCalleeStrings entirely once the sweep lands.
+      '@astryx/no-hardcoded-i18n-string': [isStrictMode ? 'error' : 'warn', {
+        allowedCalleeStrings: ['Copied', 'Selection cleared', 'All selected'],
       }],
     },
   },
@@ -314,7 +334,16 @@ export default defineConfig(
   // .mjs sources a Node language environment and enforces the JSON-stdout
   // contract (#2467) at author time via @astryx/no-raw-console-cli.
   {
-    files: ["packages/cli/src/**/*.mjs", "packages/cli/bin/**/*.mjs"],
+    files: [
+      "packages/cli/api/**/*.mjs",
+      "packages/cli/cli/**/*.mjs",
+      "packages/cli/codemods/**/*.mjs",
+      "packages/cli/authoring/**/*.mjs",
+      "packages/cli/lib/**/*.mjs",
+      "packages/cli/utils/**/*.mjs",
+      "packages/cli/schemas/**/*.mjs",
+      "packages/cli/bin/**/*.mjs",
+    ],
     plugins: {
       '@astryx': astryxEslintPlugin,
     },
@@ -360,7 +389,16 @@ export default defineConfig(
   // Copyright header for CLI .mjs sources (the main copyright block only
   // covers .ts/.tsx).
   {
-    files: ["packages/cli/src/**/*.mjs", "packages/cli/bin/**/*.mjs"],
+    files: [
+      "packages/cli/api/**/*.mjs",
+      "packages/cli/cli/**/*.mjs",
+      "packages/cli/codemods/**/*.mjs",
+      "packages/cli/authoring/**/*.mjs",
+      "packages/cli/lib/**/*.mjs",
+      "packages/cli/utils/**/*.mjs",
+      "packages/cli/schemas/**/*.mjs",
+      "packages/cli/bin/**/*.mjs",
+    ],
     plugins: {
       '@astryx': astryxEslintPlugin,
     },

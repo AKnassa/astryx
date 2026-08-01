@@ -37,6 +37,7 @@ import {Icon, type IconName} from '../Icon';
 import {Spinner} from '../Spinner';
 import {VisuallyHidden} from '../VisuallyHidden';
 import {themeProps} from '../utils/themeProps';
+import {useTranslator} from '../i18n';
 
 // =============================================================================
 // Types
@@ -133,7 +134,10 @@ const styles = stylex.create({
     width: '14px',
     height: '14px',
     color: colorVars['--color-text-disabled'],
-    transition: `transform ${durationVars['--duration-fast']} ${easeVars['--ease-standard']}`,
+    transition: {
+      default: `transform ${durationVars['--duration-fast']} ${easeVars['--ease-standard']}`,
+      '@media (prefers-reduced-motion: reduce)': 'none',
+    },
   },
   chevronExpanded: {
     transform: 'rotate(180deg)',
@@ -141,7 +145,10 @@ const styles = stylex.create({
   groupContent: {
     display: 'grid',
     gridTemplateRows: '0fr',
-    transition: `grid-template-rows ${durationVars['--duration-medium']} ${easeVars['--ease-standard']}`,
+    transition: {
+      default: `grid-template-rows ${durationVars['--duration-medium']} ${easeVars['--ease-standard']}`,
+      '@media (prefers-reduced-motion: reduce)': 'none',
+    },
   },
   groupContentExpanded: {
     gridTemplateRows: '1fr',
@@ -266,7 +273,10 @@ const styles = stylex.create({
     width: '14px',
     height: '14px',
     color: colorVars['--color-text-disabled'],
-    transition: `transform ${durationVars['--duration-fast']} ${easeVars['--ease-standard']}`,
+    transition: {
+      default: `transform ${durationVars['--duration-fast']} ${easeVars['--ease-standard']}`,
+      '@media (prefers-reduced-motion: reduce)': 'none',
+    },
     marginInlineStart: 'auto',
   },
   callDetailContent: {
@@ -354,6 +364,7 @@ function getToolCallKey(call: ChatToolCallItem): string {
 // =============================================================================
 
 function CallRow({call}: {call: ChatToolCallItem}) {
+  const t = useTranslator();
   const status = call.status ?? 'complete';
   const hasDetail = call.resultDetail != null;
   const [isDetailOpen, setIsDetailOpen] = useState(false);
@@ -405,7 +416,11 @@ function CallRow({call}: {call: ChatToolCallItem}) {
           // as real text so it reaches screen readers, keyboard, and touch
           // users. Rendering it inside the row also folds it into the
           // accessible name of expandable (role="button") rows.
-          <VisuallyHidden>{`Error: ${call.errorMessage}`}</VisuallyHidden>
+          <VisuallyHidden>
+            {t('@astryx.chatToolCalls.error', {
+              message: call.errorMessage ?? '',
+            })}
+          </VisuallyHidden>
         )}
       </span>
       <span {...stylex.props(styles.callName)}>{call.name}</span>
@@ -489,6 +504,7 @@ function CallRow({call}: {call: ChatToolCallItem}) {
  * ```
  */
 export function ChatToolCalls(props: ChatToolCallsProps) {
+  const t = useTranslator();
   const {
     calls,
     label: _customLabel,
@@ -571,7 +587,7 @@ export function ChatToolCalls(props: ChatToolCallsProps) {
               <Icon icon="wrench" size="sm" color="inherit" />
             </span>
             <span {...stylex.props(styles.groupLabel)}>
-              {calls.length} tool calls
+              {t('@astryx.chatToolCalls.groupLabel', {count: calls.length})}
             </span>
           </>
         ) : (
