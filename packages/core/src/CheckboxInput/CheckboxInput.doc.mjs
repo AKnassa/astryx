@@ -121,6 +121,12 @@ export const docs = {
       description:
         'Status indicator. Displays a colored message box below the checkbox and sets aria-invalid for errors.',
     },
+    {
+      name: 'width',
+      type: 'SizeValue',
+      description:
+        'Width of the field (number = pixels, string used as-is, e.g. "100%"). Sizes the whole field (label, control, and status) so they stay aligned.',
+    },
   ],
   theming: {
     targets: [

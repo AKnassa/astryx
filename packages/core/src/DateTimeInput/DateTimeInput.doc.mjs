@@ -174,6 +174,12 @@ export const docs = {
       default: '1',
     },
     {
+      name: 'width',
+      type: 'SizeValue',
+      description:
+        'Width of the field (number = pixels, string used as-is, e.g. "100%"). Sizes the whole field (label, control, and status) so they stay aligned.',
+    },
+    {
       name: 'xstyle',
       type: 'StyleXStyles',
       description:
@@ -183,6 +189,14 @@ export const docs = {
   theming: {
     targets: [
       {className: 'astryx-date-time-input', visualProps: ['size', 'status']},
+      {
+        className: 'astryx-date-time-input-date-segment',
+        visualProps: ['size', 'status'],
+      },
+      {
+        className: 'astryx-date-time-input-time-segment',
+        visualProps: ['size', 'status'],
+      },
     ],
   },
   usage: {
@@ -469,11 +483,18 @@ export const docsZh = {
       description:
         '用于布局自定义的 StyleX 样式。必须是 stylex.create() 的值。',
     },
-
   ],
   theming: {
     targets: [
       {className: 'astryx-date-time-input', visualProps: ['size', 'status']},
+      {
+        className: 'astryx-date-time-input-date-segment',
+        visualProps: ['size', 'status'],
+      },
+      {
+        className: 'astryx-date-time-input-time-segment',
+        visualProps: ['size', 'status'],
+      },
     ],
   },
 };
