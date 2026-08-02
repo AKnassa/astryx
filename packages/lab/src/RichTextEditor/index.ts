@@ -15,12 +15,20 @@
 export {RichTextEditor} from './RichTextEditor';
 export type {
   RichTextEditorProps,
+  RichTextEditorRef,
   RichTextEditorStatus,
   RichTextEditorStatusType,
   RichTextEditorSize,
+  Transformer,
 } from './RichTextEditor';
 
 export {RichTextView} from './RichTextView';
 export type {RichTextViewProps} from './RichTextView';
 
 export {sharedEditorTheme} from './editorTheme';
+
+export {
+  markdownToEditorStateJSON,
+  editorStateJSONToMarkdown,
+} from './markdownSerializers';
+export type {MarkdownSerializerOptions} from './markdownSerializers';

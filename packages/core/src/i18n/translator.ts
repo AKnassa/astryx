@@ -17,7 +17,7 @@
  * - /packages/core/src/i18n/resolve.ts
  * - /packages/core/src/i18n/InternationalizationContext.ts
  * - /packages/core/src/i18n/InternationalizationProvider.tsx
- * - /packages/cli/docs/internationalization.doc.mjs
+ * - /packages/cli/assets/docs/internationalization.doc.mjs
  */
 
 /**

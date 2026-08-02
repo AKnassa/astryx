@@ -18,7 +18,7 @@
  * - /packages/core/src/i18n/translator.ts
  * - /packages/core/src/i18n/index.ts
  * - /packages/core/src/i18n/InternationalizationProvider.doc.mjs
- * - /packages/cli/docs/internationalization.doc.mjs
+ * - /packages/cli/assets/docs/internationalization.doc.mjs
  */
 
 import {useMemo, type ReactNode} from 'react';
