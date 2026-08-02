@@ -415,6 +415,41 @@ describe('DropdownMenu dividers', () => {
   });
 });
 
+describe('DropdownMenu theming slots', () => {
+  it('exposes a themeable slot on the section heading', () => {
+    render(
+      <DropdownMenu
+        button={{label: 'Actions'}}
+        items={[
+          {
+            type: 'section',
+            title: 'File Actions',
+            items: [{label: 'New'}],
+          },
+        ]}
+      />,
+    );
+
+    expect(screen.getByText('File Actions')).toHaveClass(
+      'astryx-dropdown-menu-section-heading',
+    );
+  });
+
+  it('exposes a themeable slot on the menu divider', () => {
+    render(
+      <DropdownMenu
+        button={{label: 'Actions'}}
+        items={[{label: 'Edit'}, {type: 'divider'}, {label: 'Delete'}]}
+      />,
+    );
+
+    const divider = screen.getByRole('separator', {hidden: true});
+    expect(divider).toHaveClass('astryx-dropdown-menu-divider');
+    // Still carries the base Divider slot so global divider theming applies too.
+    expect(divider).toHaveClass('astryx-divider');
+  });
+});
+
 describe('DropdownMenu button customization', () => {
   it('renders with different button variants', () => {
     const {rerender} = render(
@@ -780,5 +815,65 @@ describe('DropdownMenu keyboard access for menuitemradio/menuitemcheckbox (#3829
     expect(
       screen.getByRole('menuitemradio', {name: 'Oldest', hidden: true}),
     ).toHaveFocus();
+  });
+
+  it('moves focus to the item the mouse hovers, keeping a single highlight', async () => {
+    const user = userEvent.setup();
+    render(
+      <DropdownMenu button={{label: 'Actions'}}>
+        <DropdownMenuItem label="Edit" onClick={() => {}} />
+        <DropdownMenuItem label="Duplicate" onClick={() => {}} />
+        <DropdownMenuItem label="Delete" onClick={() => {}} />
+      </DropdownMenu>,
+    );
+
+    await user.click(screen.getByRole('button', {name: /Actions/}));
+    // Keyboard focus starts on the first item.
+    const edit = screen.getByRole('menuitem', {name: 'Edit', hidden: true});
+    const del = screen.getByRole('menuitem', {name: 'Delete', hidden: true});
+    edit.focus();
+    expect(edit).toHaveFocus();
+
+    // A mouse hover over another item moves focus to it, so the single
+    // focus-driven highlight follows the pointer instead of leaving two.
+    fireEvent.pointerMove(del, {pointerType: 'mouse'});
+    expect(del).toHaveFocus();
+    expect(edit).not.toHaveFocus();
+  });
+
+  it('does not move focus on hover for a disabled item', async () => {
+    const user = userEvent.setup();
+    render(
+      <DropdownMenu button={{label: 'Actions'}}>
+        <DropdownMenuItem label="Edit" onClick={() => {}} />
+        <DropdownMenuItem label="Delete" isDisabled onClick={() => {}} />
+      </DropdownMenu>,
+    );
+
+    await user.click(screen.getByRole('button', {name: /Actions/}));
+    const edit = screen.getByRole('menuitem', {name: 'Edit', hidden: true});
+    const del = screen.getByRole('menuitem', {name: 'Delete', hidden: true});
+    edit.focus();
+
+    fireEvent.pointerMove(del, {pointerType: 'mouse'});
+    expect(edit).toHaveFocus();
+  });
+
+  it('does not move focus for a non-mouse (touch) pointer', async () => {
+    const user = userEvent.setup();
+    render(
+      <DropdownMenu button={{label: 'Actions'}}>
+        <DropdownMenuItem label="Edit" onClick={() => {}} />
+        <DropdownMenuItem label="Delete" onClick={() => {}} />
+      </DropdownMenu>,
+    );
+
+    await user.click(screen.getByRole('button', {name: /Actions/}));
+    const edit = screen.getByRole('menuitem', {name: 'Edit', hidden: true});
+    const del = screen.getByRole('menuitem', {name: 'Delete', hidden: true});
+    edit.focus();
+
+    fireEvent.pointerMove(del, {pointerType: 'touch'});
+    expect(edit).toHaveFocus();
   });
 });
