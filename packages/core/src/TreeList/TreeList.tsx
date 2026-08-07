@@ -12,7 +12,7 @@
  * - /packages/core/src/TreeList/TreeList.doc.mjs
  * - /packages/core/src/TreeList/index.ts
  * - /apps/storybook/stories/TreeList.stories.tsx
- * - /packages/cli/templates/blocks/components/TreeList/ (showcase blocks)
+ * - /packages/cli/assets/templates/blocks/components/TreeList/ (showcase blocks)
  */
 
 import {useId, useState, useMemo, useCallback, type ReactNode} from 'react';
@@ -21,7 +21,11 @@ import {spacingVars} from '../theme/tokens.stylex';
 import {mergeProps} from '../utils';
 import type {BaseProps} from '../BaseProps';
 import {TreeListItem} from './TreeListItem';
-import type {TreeListItemData, TreeListDensity} from './TreeListTypes';
+import type {
+  TreeListItemData,
+  TreeListDensity,
+  TreeListVariant,
+} from './TreeListTypes';
 import {themeProps} from '../utils/themeProps';
 import {useTreeFocus} from '../hooks/useTreeFocus';
 
@@ -29,7 +33,7 @@ import {useTreeFocus} from '../hooks/useTreeFocus';
 // Types
 // =============================================================================
 
-export {type TreeListDensity} from './TreeListTypes';
+export {type TreeListDensity, type TreeListVariant} from './TreeListTypes';
 
 export interface TreeListProps extends BaseProps<HTMLDivElement> {
   /** Ref forwarded to the root element */
@@ -51,6 +55,16 @@ export interface TreeListProps extends BaseProps<HTMLDivElement> {
   density?: TreeListDensity;
 
   /**
+   * Visual treatment of the hierarchy guide (connector) lines.
+   * - `lineGuides`: connector lines between parent and child rows
+   * - `noGuides`: no connector lines; indentation alone conveys nesting
+   *
+   * Orthogonal to `density` (which controls spacing) — the two compose.
+   * @default 'lineGuides'
+   */
+  variant?: TreeListVariant;
+
+  /**
    * Header content rendered above the tree list.
    * Semantically associated via aria-labelledby.
    */
@@ -69,6 +83,11 @@ export interface TreeListProps extends BaseProps<HTMLDivElement> {
 const styles = stylex.create({
   root: {
     position: 'relative',
+    // Per-level indentation step. Public, themeable lever: a theme can retune
+    // the tree's indent metric (e.g. to `var(--spacing-5)`) via `defineTheme`
+    // on the `tree-list` target, and both the row margins (TreeListItem) and
+    // the guide-line offsets (TreeListBranches) read it so they stay aligned.
+    '--tree-list-indent': spacingVars['--spacing-4'],
   },
   list: {
     margin: 0,
@@ -156,6 +175,7 @@ function findInitialTabbableId(items: TreeListItemData[]): string | undefined {
 export function TreeList({
   items,
   density = 'balanced',
+  variant = 'lineGuides',
   header,
   xstyle,
   className,
@@ -275,6 +295,7 @@ export function TreeList({
           isExpanded={isExpanded}
           onToggle={handleToggle}
           density={density}
+          variant={variant}
           renderedChildren={renderedChildren}
           posInSet={index + 1}
           setSize={items.length}
