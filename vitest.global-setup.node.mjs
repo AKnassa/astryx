@@ -24,7 +24,7 @@
  * SYNC: When modified, update this header.
  */
 
-import {ensureChartsBuilt} from './packages/cli/cli/commands/ensure-core-built.mjs';
+import {ensureChartsBuilt} from './packages/cli/clients/cli/commands/ensure-core-built.mjs';
 
 export default function setup() {
   ensureChartsBuilt();
