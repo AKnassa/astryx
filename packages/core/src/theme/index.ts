@@ -21,7 +21,6 @@ export type {MediaThemeProps} from './MediaTheme';
 export {
   defineTheme,
   generateThemeCSS,
-  generateThemeCSSFlat,
   generateOnMediaCSS,
   generateThemeRules,
   generateThemeRulesSplit,
@@ -30,6 +29,12 @@ export {
   isDefinedTheme,
   tokenDefaults,
 } from './defineTheme';
+export {
+  registerTheme,
+  getRegisteredTheme,
+  getRegisteredThemes,
+  resetThemes,
+} from './themeRegistry';
 export type {
   DefineThemeInput,
   DefinedTheme,
@@ -89,7 +94,6 @@ export {
   shadowDefaults,
   durationDefaults,
   easeDefaults,
-  transitionDefaults,
   typographyDefaults,
   textSizeDefaults,
   fontWeightDefaults,
@@ -102,7 +106,6 @@ export {
   shadowVars,
   durationVars,
   easeVars,
-  transitionVars,
   typographyVars,
   textSizeVars,
   fontWeightVars,
@@ -119,14 +122,13 @@ export type {
   ShadowVarName,
   DurationVarName,
   EaseVarName,
-  TransitionVarName,
   TypographyVarName,
   TextSizeVarName,
   FontWeightVarName,
   TypeScaleVarName,
 } from './tokens.stylex';
 
-export {useTheme, ThemeContext} from './useTheme';
+export {useTheme, useThemeName, ThemeContext} from './useTheme';
 export type {UseThemeReturn, ThemeContextValue} from './useTheme';
 export {
   resolveThemeToken,
@@ -140,6 +142,7 @@ export type {
   ResolvedThemeMode,
 } from './tokens';
 
+export type {TextColorMap} from '../Text';
 export type {
   ThemeMode,
   HeadingTag,
@@ -150,7 +153,6 @@ export type {
   TextWeight,
   TextColor,
   BuiltinTextColor,
-  TextColorMap,
   TypographyConfig,
   TypographyRole,
   FontWeight,

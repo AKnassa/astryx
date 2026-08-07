@@ -11,8 +11,9 @@
     "test:watch": "vitest",
     "test:coverage": "vitest --coverage",
     "check:package-boundaries": "node scripts/check-package-boundaries.js",
-    "check:repo": "pnpm check:sync && pnpm check:package-boundaries && pnpm check:changesets && pnpm check:demo-media && pnpm check:executable-bits",
+    "check:repo": "pnpm check:sync && pnpm check:package-boundaries && pnpm check:changesets && pnpm check:demo-media && pnpm check:executable-bits && pnpm check:cli-structure",
     "check:changesets": "node scripts/check-changesets.mjs",
+    "check:cli-structure": "node scripts/check-cli-structure.mjs",
     "check:executable-bits": "node scripts/check-executable-bits.mjs",
     "check:demo-media": "node scripts/check-demo-media.mjs",
     "check:sync": "node scripts/check-sync.js",
@@ -29,14 +30,15 @@
     "package:source": "node scripts/package-source.js",
     "changeset": "changeset",
     "changeset:new": "node scripts/changeset-new.mjs",
-    "version-packages": "changeset version && node scripts/sync-internal-deps.mjs && node scripts/format-changelogs.mjs",
+    "version-packages": "changeset version && node scripts/promote-codemod-next.mjs && node scripts/sync-internal-deps.mjs && node scripts/format-changelogs.mjs",
     "format-changelogs": "node scripts/format-changelogs.mjs",
     "setup-trusted-publishing": "node scripts/npm/setup-trusted-publishing.mjs",
     "verify-exports": "node scripts/verify-exports.mjs",
     "release": "pnpm build && changeset publish",
     "prepare": "husky install",
     "dev:sandbox": "pnpm -F @astryxdesign/core build && pnpm -F @astryxdesign/sandbox dev",
-    "dev:sandbox:source": "ASTRYX_SOURCE=1 pnpm -F @astryxdesign/sandbox dev"
+    "dev:sandbox:source": "ASTRYX_SOURCE=1 pnpm -F @astryxdesign/sandbox dev",
+    "npm:prune-canaries": "node scripts/npm/prune-canaries.mjs"
   },
   "devDependencies": {
     "@axe-core/playwright": "^4.12.1",

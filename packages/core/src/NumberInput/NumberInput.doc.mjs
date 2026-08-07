@@ -252,11 +252,6 @@ export const docs = {
         required: false,
         description: 'Placeholder text shown when the input is empty.',
       },
-      {
-        name: 'Spinner',
-        required: false,
-        description: 'Increment and decrement controls for the value.',
-      },
     ],
   },
 };
@@ -485,11 +480,6 @@ export const docsZh = {
         required: false,
         description: 'Placeholder text shown when the input is empty.',
       },
-      {
-        name: 'Spinner',
-        required: false,
-        description: 'Increment and decrement controls for the value.',
-      },
     ],
   },
 };
@@ -547,11 +537,6 @@ export const docsDense = {
         name: 'Placeholder',
         required: false,
         description: 'Placeholder text shown when the input is empty.',
-      },
-      {
-        name: 'Spinner',
-        required: false,
-        description: 'Increment and decrement controls for the value.',
       },
     ],
   },

@@ -44,7 +44,7 @@ import {
 } from '../theme/tokens.stylex';
 import {usePopover} from '../Popover/usePopover';
 import {Grid} from '../Grid/Grid';
-import {getIcon} from '../Icon/globalIconRegistry';
+import {useIcon} from '../Icon';
 import {mergeProps, mergeRefs} from '../utils';
 import type {BaseProps} from '../BaseProps';
 import {navItemStyles} from '../NavItem/navItemStyles.stylex';
@@ -364,6 +364,7 @@ function DefaultMegaMenu({
   onOpenChange,
 }: TopNavMegaMenuProps) {
   const slot = useTopNavSlot();
+  const chevronDownIcon = useIcon('chevronDown');
   const showTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const hideTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const triggerButtonRef = useRef<HTMLButtonElement | null>(null);
@@ -476,7 +477,7 @@ function DefaultMegaMenu({
             styles.chevron,
             popover.isOpen && styles.chevronOpen,
           )}>
-          {getIcon('chevronDown')}
+          {chevronDownIcon}
         </span>
       </button>
       {popover.render(
@@ -492,11 +493,9 @@ function DefaultMegaMenu({
           <div {...stylex.props(styles.panelContent)}>
             {/* Menu items section */}
             {items != null && (
-              <div {...stylex.props(styles.menuWrapper)}>
-                <Grid columns={2} gap={2}>
-                  {items}
-                </Grid>
-              </div>
+              <Grid columns={2} gap={2} xstyle={styles.menuWrapper}>
+                {items}
+              </Grid>
             )}
 
             {/* Featured section */}
@@ -525,6 +524,7 @@ function DrawerMegaMenu({
   featured,
 }: Pick<TopNavMegaMenuProps, 'label' | 'items' | 'featured'>) {
   const [isExpanded, setIsExpanded] = useState(false);
+  const chevronDownIcon = useIcon('chevronDown');
   const menuId = `mega-menu-${label.toLowerCase().replace(/\s+/g, '-')}`;
 
   return (
@@ -545,7 +545,7 @@ function DrawerMegaMenu({
             styles.drawerChevron,
             isExpanded && styles.drawerChevronExpanded,
           )}>
-          {getIcon('chevronDown')}
+          {chevronDownIcon}
         </span>
       </button>
 

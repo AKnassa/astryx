@@ -45,7 +45,6 @@ import {
   shadowDefaults,
   durationDefaults,
   easeDefaults,
-  transitionDefaults,
   typographyDefaults,
   textSizeDefaults,
   fontWeightDefaults,
@@ -63,6 +62,7 @@ import {expandColorScale, type ColorScaleConfig} from './expandColorScale';
 import type {DomainTokenName} from './domainTokens';
 import {domainTokenDefaults} from './domainTokens';
 import type {SyntaxThemeDefinition} from './syntax';
+import {registerTheme} from './themeRegistry';
 
 // =============================================================================
 // Types
@@ -77,7 +77,6 @@ export type CoreTokenName =
   | keyof typeof shadowDefaults
   | keyof typeof durationDefaults
   | keyof typeof easeDefaults
-  | keyof typeof transitionDefaults
   | keyof typeof typographyDefaults
   | keyof typeof textSizeDefaults
   | keyof typeof fontWeightDefaults
@@ -366,7 +365,6 @@ export const tokenDefaults: Record<string, string> = {
   ...shadowDefaults,
   ...durationDefaults,
   ...easeDefaults,
-  ...transitionDefaults,
   ...typographyDefaults,
   ...textSizeDefaults,
   ...fontWeightDefaults,
@@ -624,7 +622,7 @@ export function defineTheme(input: DefineThemeInput): DefinedTheme {
       ? {...base.icons, ...input.icons}
       : (input.icons ?? base?.icons);
 
-  return {
+  const theme: DefinedTheme = {
     name: input.name,
     tokens,
     components,
@@ -633,6 +631,9 @@ export function defineTheme(input: DefineThemeInput): DefinedTheme {
     __onDark,
     __onLight,
   };
+
+  registerTheme(theme);
+  return theme;
 }
 
 // =============================================================================
@@ -644,7 +645,6 @@ export {
   generateThemeRulesSplit,
   generateOnMediaCSS,
   generateThemeCSS,
-  generateThemeCSSFlat,
   type ThemeRulesSplit,
   type ThemeCSSOutput,
 } from './generateThemeRules';
