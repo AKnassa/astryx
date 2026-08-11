@@ -611,10 +611,19 @@ export function Button({
   // the consumer is deliberately showing it.
   const delaySpinner = isPending || isInterruptible;
   const groupDisabled = buttonGroup?.isDisabled ?? false;
-  // When interruptible, the loading state drives the spinner and aria-busy but
-  // not disabled, so clicks keep landing and can interrupt the in-flight action.
-  const buttonDisabled =
-    isDisabled || groupDisabled || (isLoadingState && !isInterruptible);
+  // Hard-disabled (isDisabled / group) is the only state that may use the
+  // native attribute. Busy must not: a natively disabled element cannot hold
+  // focus, so the browser drops a keyboard user to <body> the moment a
+  // clickAction starts (#4871). Busy is announced via aria-busy/aria-disabled
+  // and re-entry is blocked in the click/keydown handlers instead. When
+  // interruptible, the loading state drives the spinner and aria-busy but
+  // nothing is suppressed, so clicks keep landing and can interrupt the
+  // in-flight action.
+  const hardDisabled = isDisabled || groupDisabled;
+  const isBusy = isLoadingState && !isInterruptible && !hardDisabled;
+  // Everything that suppresses activation — pointer via handleClick, keyboard
+  // via handleKeyDown.
+  const buttonDisabled = hardDisabled || isBusy;
   // isIconOnly prop is the source of truth for icon-only rendering.
   // When false (default), label is always rendered as visible text.
 
@@ -622,11 +631,14 @@ export function Button({
 
   // Render as link when href is provided and button is not disabled.
   // Disabled links are an accessibility anti-pattern — fall back to <button>.
-  const renderAsLink = href != null && !buttonDisabled;
+  // Busy does NOT fall back: swapping <a> → <button disabled> mid-action
+  // would drop focus exactly like the native attribute does (#4871).
+  const renderAsLink = href != null && !hardDisabled;
 
-  // Use aria-disabled when tooltip is present so the button remains focusable
-  // for keyboard users to reach the tooltip. Otherwise use native disabled.
-  const useAriaDisabled = tooltip != null && buttonDisabled;
+  // Use aria-disabled (keeping the element focusable) while busy, and when a
+  // tooltip is present so keyboard users can still reach the tooltip. Only
+  // hard-disabled without a tooltip uses the native attribute.
+  const useAriaDisabled = isBusy || (tooltip != null && hardDisabled);
 
   // Attach tooltip behavior via the hook rather than wrapping the button in a
   // <Tooltip> element. The hook adds hover/focus triggers to the button itself,
@@ -793,6 +805,7 @@ export function Button({
         {...describedByProp}
         {...edgeCompAttr}
         aria-busy={isLoadingState || undefined}
+        aria-disabled={isBusy || undefined}
         onClick={handleClick}>
         {buttonContent}
       </LinkComponent>
@@ -802,7 +815,7 @@ export function Button({
       <button
         ref={mergedButtonRef}
         type={type}
-        disabled={useAriaDisabled ? undefined : buttonDisabled}
+        disabled={useAriaDisabled ? undefined : hardDisabled}
         {...sharedMergedProps}
         {...props}
         {...ariaLabelProp}
