@@ -13,6 +13,7 @@ import {describe, it, expect, vi} from 'vitest';
 import {render, screen, fireEvent, act} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import {Button} from './Button';
+import {ButtonGroup} from '../ButtonGroup/ButtonGroup';
 import {Badge} from '../Badge/Badge';
 import {InternationalizationProvider} from '../i18n';
 
@@ -626,5 +627,228 @@ describe('Button', () => {
     render(<Button label="Docs" href="https://example.com" />);
     const link = screen.getByRole('link');
     expect(link).not.toHaveAttribute('aria-busy');
+  });
+
+  describe('busy state edge cases (#4871)', () => {
+    const pendingAction = () => {
+      let resolveAction: (() => void) | undefined;
+      const clickAction = vi.fn(
+        async () =>
+          new Promise<void>(resolve => {
+            resolveAction = resolve;
+          }),
+      );
+      const settle = async () =>
+        act(async () => {
+          resolveAction?.();
+          await Promise.resolve();
+        });
+      return {clickAction, settle};
+    };
+
+    it('tooltip + busy: aria-disabled path, Enter suppressed, recovers on settle', async () => {
+      const user = userEvent.setup();
+      const {clickAction, settle} = pendingAction();
+      render(
+        <Button
+          label="Save"
+          tooltip="Saves the draft"
+          clickAction={clickAction}
+        />,
+      );
+      const button = screen.getByRole('button');
+
+      button.focus();
+      await user.keyboard('{Enter}');
+      expect(clickAction).toHaveBeenCalledTimes(1);
+      expect(button).not.toHaveAttribute('disabled');
+      expect(button).toHaveAttribute('aria-disabled', 'true');
+      expect(button).toHaveAttribute('aria-busy', 'true');
+
+      await user.keyboard('{Enter}');
+      expect(clickAction).toHaveBeenCalledTimes(1);
+
+      await settle();
+      expect(button).not.toHaveAttribute('aria-disabled');
+      await user.keyboard('{Enter}');
+      expect(clickAction).toHaveBeenCalledTimes(2);
+      await settle();
+    });
+
+    it('isDisabled + isLoading (no tooltip): native disabled wins over busy', () => {
+      // isBusy deliberately excludes hard-disabled: a button the consumer
+      // disabled stays natively disabled even while showing a spinner.
+      render(<Button label="Save" isDisabled isLoading />);
+      const button = screen.getByRole('button');
+      expect(button).toBeDisabled();
+      expect(button).toHaveAttribute('aria-busy', 'true');
+      expect(button).not.toHaveAttribute('aria-disabled');
+    });
+
+    it('isDisabled + isLoading + tooltip: aria-disabled path, no handlers fire', async () => {
+      const user = userEvent.setup();
+      const handleClick = vi.fn();
+      render(
+        <Button
+          label="Save"
+          tooltip="Why disabled"
+          isDisabled
+          isLoading
+          onClick={handleClick}
+        />,
+      );
+      const button = screen.getByRole('button');
+      expect(button).not.toHaveAttribute('disabled');
+      expect(button).toHaveAttribute('aria-disabled', 'true');
+      await user.click(button);
+      expect(handleClick).not.toHaveBeenCalled();
+    });
+
+    it('ButtonGroup disabled: child stays natively disabled, busy or not', () => {
+      render(
+        <ButtonGroup label="Actions" isDisabled>
+          <Button label="Copy" />
+          <Button label="Save" isLoading />
+        </ButtonGroup>,
+      );
+      expect(screen.getByRole('button', {name: 'Copy'})).toBeDisabled();
+      expect(screen.getByRole('button', {name: 'Save'})).toBeDisabled();
+    });
+
+    it('ButtonGroup disabled + tooltip on child: aria-disabled path', () => {
+      render(
+        <ButtonGroup label="Actions" isDisabled>
+          <Button label="Copy" tooltip="Nothing selected" />
+        </ButtonGroup>,
+      );
+      const button = screen.getByRole('button', {name: 'Copy'});
+      expect(button).not.toHaveAttribute('disabled');
+      expect(button).toHaveAttribute('aria-disabled', 'true');
+    });
+
+    it('isInterruptible busy: aria-busy without aria-disabled (still interactive)', async () => {
+      const user = userEvent.setup();
+      const {clickAction, settle} = pendingAction();
+      render(
+        <Button label="Toggle" isInterruptible clickAction={clickAction} />,
+      );
+      const button = screen.getByRole('button');
+
+      await user.click(button);
+      expect(button).toHaveAttribute('aria-busy', 'true');
+      // Interruptible is genuinely interactive, so announcing it disabled
+      // would be a lie to AT.
+      expect(button).not.toHaveAttribute('aria-disabled');
+      expect(button).not.toHaveAttribute('disabled');
+      await settle();
+    });
+
+    it('isInterruptible + isDisabled: native disabled wins, clicks dead', async () => {
+      const user = userEvent.setup();
+      const clickAction = vi.fn();
+      render(
+        <Button
+          label="Toggle"
+          isInterruptible
+          isDisabled
+          clickAction={clickAction}
+        />,
+      );
+      const button = screen.getByRole('button');
+      expect(button).toBeDisabled();
+      await user.click(button);
+      expect(clickAction).not.toHaveBeenCalled();
+    });
+
+    it('busy submit button does not submit its form; idle one does', async () => {
+      const user = userEvent.setup();
+      const handleSubmit = vi.fn((e: React.FormEvent) => e.preventDefault());
+      const {rerender} = render(
+        <form onSubmit={handleSubmit}>
+          <Button label="Save" type="submit" isLoading />
+        </form>,
+      );
+      await user.click(screen.getByRole('button'));
+      expect(handleSubmit).not.toHaveBeenCalled();
+
+      rerender(
+        <form onSubmit={handleSubmit}>
+          <Button label="Save" type="submit" />
+        </form>,
+      );
+      await user.click(screen.getByRole('button'));
+      expect(handleSubmit).toHaveBeenCalledTimes(1);
+    });
+
+    it('isDisabled + href still falls back to a native disabled button', () => {
+      // The disabled-link anti-pattern fallback is unchanged; only busy keeps
+      // the anchor.
+      render(<Button label="Docs" href="https://example.com" isDisabled />);
+      expect(screen.queryByRole('link')).not.toBeInTheDocument();
+      expect(screen.getByRole('button')).toBeDisabled();
+    });
+
+    it('busy link: focusable, but click activation is swallowed', async () => {
+      const user = userEvent.setup();
+      const handleClick = vi.fn();
+      render(
+        <Button
+          label="Docs"
+          href="https://example.com"
+          isLoading
+          onClick={handleClick}
+        />,
+      );
+      const link = screen.getByRole('link');
+      link.focus();
+      expect(link).toHaveFocus();
+      await user.click(link);
+      expect(handleClick).not.toHaveBeenCalled();
+    });
+
+    it('recovers after a rejected clickAction: busy clears and it fires again', async () => {
+      const user = userEvent.setup();
+      const consoleError = vi
+        .spyOn(console, 'error')
+        .mockImplementation(() => {});
+      let rejectAction: ((e: Error) => void) | undefined;
+      const clickAction = vi.fn(
+        async () =>
+          new Promise<void>((_resolve, reject) => {
+            rejectAction = reject;
+          }),
+      );
+      render(<Button label="Save" clickAction={clickAction} />);
+      const button = screen.getByRole('button');
+
+      await user.click(button);
+      expect(button).toHaveAttribute('aria-busy', 'true');
+
+      const failure = new Error('save failed');
+      await act(async () => {
+        rejectAction?.(failure);
+        await Promise.resolve();
+      });
+
+      // A failed action must not strand the busy state: the transition
+      // settles, the spinner leaves, and the user can retry. (Without the
+      // catch in the action, isPending sticks and the button is bricked.)
+      expect(button).not.toHaveAttribute('aria-busy', 'true');
+      await user.click(button);
+      expect(clickAction).toHaveBeenCalledTimes(2);
+
+      // The rejection is reported (devError), not swallowed.
+      expect(consoleError).toHaveBeenCalledWith(
+        'Button: clickAction rejected:',
+        failure,
+      );
+
+      // Settle the retry's action too so nothing dangles into later tests.
+      await act(async () => {
+        rejectAction?.(new Error('save failed'));
+        await Promise.resolve();
+      });
+      consoleError.mockRestore();
+    });
   });
 });

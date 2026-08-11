@@ -41,7 +41,7 @@ import {VisuallyHidden} from '../VisuallyHidden';
 import {EDGE_COMP_ATTR} from '../Layout/edgeCompensation.stylex';
 import {useSize} from '../SizeContext/SizeContext';
 import {useButtonGroup} from '../ButtonGroup/ButtonGroupContext';
-import {mergeProps, mergeRefs} from '../utils';
+import {devError, mergeProps, mergeRefs} from '../utils';
 import {useLinkComponent} from '../Link/useLinkComponent';
 import type {LinkComponentType} from '../Link/types';
 import {themeProps} from '../utils/themeProps';
@@ -334,7 +334,9 @@ export interface ButtonProps extends BaseProps<HTMLButtonElement> {
    */
   onClick?: React.MouseEventHandler<HTMLButtonElement>;
   /**
-   * Async click action. Shows loading state while pending.
+   * Async click action. Shows loading state while pending. A rejected action
+   * clears the loading state (so the user can retry) and is reported via
+   * devError; handle expected failures inside the action itself.
    */
   clickAction?: (
     e: React.MouseEvent<HTMLButtonElement>,
@@ -663,6 +665,13 @@ export function Button({
       startTransition(async () => {
         try {
           await clickAction(e);
+        } catch (error) {
+          // Without this catch a rejection escapes the async action and the
+          // transition never settles: isPending sticks, the spinner never
+          // leaves, and the activation guard blocks every retry — one failed
+          // action bricks the button until remount. Settle the transition and
+          // report the failure instead of swallowing it.
+          devError('Button', 'clickAction rejected:', error);
         } finally {
           actionInFlightRef.current = false;
         }

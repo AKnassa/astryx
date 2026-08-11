@@ -148,7 +148,7 @@ export const docs = {
       name: 'clickAction',
       type: '(e: MouseEvent) => void | Promise<void>',
       description:
-        'Async click handler. Shows loading state while the returned promise is pending.',
+        'Async click handler. Shows loading state while the returned promise is pending. A rejected promise clears the loading state (so the user can retry) and is reported via devError; handle expected failures inside the action.',
     },
   ],
   playground: {
@@ -230,7 +230,7 @@ export const docsZh = {
     {
       name: 'clickAction',
       type: '(e: MouseEvent) => void | Promise<void>',
-      description: '异步点击处理函数。返回的 Promise 处于 pending 状态时显示加载状态。',
+      description: '异步点击处理函数。返回的 Promise 处于 pending 状态时显示加载状态。Promise 被拒绝时清除加载状态（用户可重试），并通过 devError 上报；预期内的失败请在 action 内部处理。',
     },
   ],
   theming: {
@@ -289,7 +289,7 @@ export const docsDense = {
     endContent: 'trailing icon/badge after label; ignored when isIconOnly; color inherited',
     tooltip: 'tooltip on hover',
     onClick: 'standard click handler; fires before clickAction',
-    clickAction: 'async click handler; shows loading while promise pending',
+    clickAction: 'async click handler; shows loading while promise pending; rejection clears loading (retry works) + devError report',
     isDisabled: 'disables button; uses aria-disabled when tooltip present',
   },
 };
