@@ -2,7 +2,7 @@
 
 /**
  * @file maskEngine.test.ts
- * @input Tests maskEngine pure functions with named + custom masks
+ * @input Tests maskEngine pure functions with pattern masks
  * @output Regression coverage for format/caret/strip/ghost math (RFC #4946)
  * @position Colocated tests for the InputMask mask engine
  *
@@ -13,7 +13,6 @@
 import {describe, expect, it} from 'vitest';
 
 import {
-  NAMED_MASKS,
   caretForRawIndex,
   formatRaw,
   ghostRemainder,
@@ -23,27 +22,15 @@ import {
   stripToRaw,
 } from './maskEngine';
 
-const phone = NAMED_MASKS['phone-us'];
-const ssn = NAMED_MASKS['ssn'];
-const zip = NAMED_MASKS['zip-us'];
-const card = NAMED_MASKS['credit-card'];
-
-describe('NAMED_MASKS', () => {
-  it('defines the four RFC masks with `#` digit slots and `_` placeholder', () => {
-    expect(phone).toEqual({pattern: '(###) ###-####', placeholder: '_'});
-    expect(zip).toEqual({pattern: '#####', placeholder: '_'});
-    expect(ssn).toEqual({pattern: '###-##-####', placeholder: '_'});
-    expect(card).toEqual({pattern: '#### #### #### ####', placeholder: '_'});
-  });
-});
+// Fixed-shape fixtures for the shapes the RFC motivates (phone, SSN, ZIP,
+// card), expressed as plain patterns — the component ships no named presets.
+const phone = resolveMask({pattern: '(###) ###-####'});
+const ssn = resolveMask({pattern: '###-##-####'});
+const zip = resolveMask({pattern: '#####'});
+const card = resolveMask({pattern: '#### #### #### ####'});
 
 describe('resolveMask', () => {
-  it('resolves a named mask to its definition', () => {
-    expect(resolveMask('phone-us')).toEqual(phone);
-    expect(resolveMask('ssn')).toEqual(ssn);
-  });
-
-  it('passes a custom pattern through and defaults the placeholder to `_`', () => {
+  it('passes the pattern through and defaults the placeholder to `_`', () => {
     expect(resolveMask({pattern: '##/##'})).toEqual({
       pattern: '##/##',
       placeholder: '_',

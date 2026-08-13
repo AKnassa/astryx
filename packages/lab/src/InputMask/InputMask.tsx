@@ -68,7 +68,6 @@ import {
   resolveMask,
   stripToRaw,
   type MaskProp,
-  type NamedMask,
 } from './maskEngine';
 
 const styles = stylex.create({
@@ -139,13 +138,6 @@ const sizeStyles = stylex.create({
 
 export type InputMaskSize = keyof typeof sizeStyles;
 
-const AUTOCOMPLETE_BY_MASK: Record<NamedMask, string> = {
-  'phone-us': 'tel-national',
-  'zip-us': 'postal-code',
-  ssn: 'off',
-  'credit-card': 'cc-number',
-};
-
 export interface InputMaskProps extends Omit<
   BaseProps,
   'onChange' | 'defaultValue'
@@ -153,8 +145,8 @@ export interface InputMaskProps extends Omit<
   /** Ref forwarded to the input element */
   ref?: React.Ref<HTMLInputElement>;
   /**
-   * The mask to apply: a built-in named mask, or a custom pattern where `#`
-   * marks a digit slot and every other character is inserted literally.
+   * The mask to apply: a pattern where `#` marks a digit slot and every
+   * other character is inserted literally.
    */
   mask: MaskProp;
   /**
@@ -163,8 +155,14 @@ export interface InputMaskProps extends Omit<
   label: string;
   /**
    * The current value as raw digits only (no literals), e.g. '5551234567'.
+   * Omit to leave the component uncontrolled (see `defaultValue`).
    */
-  value: string;
+  value?: string;
+  /**
+   * Initial raw digits for uncontrolled use, read once on mount. When `value`
+   * is provided the component is controlled and this prop is ignored.
+   */
+  defaultValue?: string;
   /**
    * Fired when the digits change. Receives the raw digits, not the
    * formatted display value.
@@ -182,7 +180,8 @@ export interface InputMaskProps extends Omit<
    */
   formatHint?: string | false;
   /**
-   * Overrides the autocomplete attribute derived from a named mask.
+   * Autocomplete attribute for the input.
+   * @default 'off'
    */
   autoComplete?: string;
   /** Whether to visually hide the label. @default false */
@@ -230,14 +229,16 @@ export interface InputMaskProps extends Omit<
  *
  * @example
  * ```
- * <InputMask mask="phone-us" label="Phone number" value={phone} onChange={setPhone} />
- * <InputMask mask={{pattern: '###-##-####'}} label="Custom ID" value={id} onChange={setId} />
+ * <InputMask mask={{pattern: '(###) ###-####'}} label="Phone number" value={phone} onChange={setPhone} />
+ * <InputMask mask={{pattern: '###-##-####'}} label="Tax ID" value={id} onChange={setId} />
+ * <InputMask mask={{pattern: '#####'}} label="ZIP code" htmlName="zip" />
  * ```
  */
 export function InputMask({
   mask,
   label,
   value,
+  defaultValue,
   onChange,
   changeAction,
   formatHint,
@@ -268,7 +269,11 @@ export function InputMask({
 }: InputMaskProps) {
   const size = useSize(sizeProp, 'md');
   const def = resolveMask(mask);
-  const rawValue = stripToRaw(def, value);
+  // Uncontrolled digits, seeded once from defaultValue; a provided `value`
+  // wins. Both routes clamp at read so a later mask change re-clamps them.
+  const [internalRaw, setInternalRaw] = useState(() => defaultValue ?? '');
+  const isControlled = value !== undefined;
+  const rawValue = stripToRaw(def, isControlled ? value : internalRaw);
 
   const id = useId();
   const inputLabelID = useId();
@@ -284,9 +289,9 @@ export function InputMask({
   const [editSeq, setEditSeq] = useState(0);
   const [compositionText, setCompositionText] = useState<string | null>(null);
 
-  const [, startTransition] = useTransition();
+  const [isPending, startTransition] = useTransition();
   const [optimisticRaw, setOptimisticRaw] = useOptimistic(rawValue);
-  const isBusy = isLoading || optimisticRaw !== rawValue;
+  const isBusy = isLoading || isPending || optimisticRaw !== rawValue;
 
   const displayed = formatRaw(def, optimisticRaw);
   // While composing, echo the IME's in-progress text unmasked; masking
@@ -339,6 +344,9 @@ export function InputMask({
   }, [editSeq]);
 
   const commitRaw = (nextRaw: string, e: ChangeEvent<HTMLInputElement>) => {
+    if (!isControlled) {
+      setInternalRaw(nextRaw);
+    }
     onChange?.(nextRaw, e);
     if (changeAction && !e.defaultPrevented) {
       startTransition(async () => {
@@ -423,9 +431,12 @@ export function InputMask({
   };
 
   const handleClear = useCallback(() => {
+    if (!isControlled) {
+      setInternalRaw('');
+    }
     onChange?.('', null as unknown as ChangeEvent<HTMLInputElement>);
     inputRef.current?.focus();
-  }, [onChange]);
+  }, [isControlled, onChange]);
 
   const {onClick: handleWrapperClick, onMouseUp: handleWrapperMouseUp} =
     useInputContainer({
@@ -433,10 +444,6 @@ export function InputMask({
       inputRef,
       disabled: isDisabled,
     });
-
-  const derivedAutoComplete =
-    autoComplete ??
-    (typeof mask === 'string' ? AUTOCOMPLETE_BY_MASK[mask] : 'off');
 
   const inputWrapper = (
     <div
@@ -477,7 +484,7 @@ export function InputMask({
           type="text"
           value={shownValue}
           inputMode="numeric"
-          autoComplete={derivedAutoComplete}
+          autoComplete={autoComplete ?? 'off'}
           onChange={handleChange}
           onCompositionStart={handleCompositionStart}
           onCompositionEnd={handleCompositionEnd}

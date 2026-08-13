@@ -2,7 +2,7 @@
 
 import type {Meta, StoryObj} from '@storybook/react';
 import {useState} from 'react';
-import {InputMask, type InputMaskProps} from '@astryxdesign/lab';
+import {InputMask} from '@astryxdesign/lab';
 import {VStack} from '@astryxdesign/core/Stack';
 import {Text} from '@astryxdesign/core/Text';
 
@@ -15,31 +15,29 @@ const meta: Meta<typeof InputMask> = {
 export default meta;
 type Story = StoryObj<typeof InputMask>;
 
-function ControlledMask(props: Omit<InputMaskProps, 'value' | 'onChange'>) {
-  const [value, setValue] = useState('');
-  return <InputMask {...props} value={value} onChange={setValue} />;
-}
+const PHONE = {pattern: '(###) ###-####'};
 
-export const NamedMasks: Story = {
+export const Masks: Story = {
   render: () => (
     <VStack gap={4}>
-      <ControlledMask mask="phone-us" label="Phone number" />
-      <ControlledMask mask="zip-us" label="ZIP code" />
-      <ControlledMask mask="ssn" label="SSN" />
-      <ControlledMask mask="credit-card" label="Card number" />
+      <InputMask mask={PHONE} label="Phone number" />
+      <InputMask mask={{pattern: '#####'}} label="ZIP code" />
+      <InputMask mask={{pattern: '###-##-####'}} label="SSN" />
+      <InputMask mask={{pattern: '#### #### #### ####'}} label="Card number" />
     </VStack>
   ),
 };
 
-export const CustomPattern: Story = {
+export const PlaceholderAndHint: Story = {
   render: () => (
     <VStack gap={4}>
-      <ControlledMask
+      <InputMask
         mask={{pattern: '###-###', placeholder: '•'}}
         label="Sort code"
         formatHint="Six digits, e.g. 123-456"
+        defaultValue="12"
       />
-      <ControlledMask
+      <InputMask
         mask={{pattern: '(+1) ### ### ####'}}
         label="Phone with country code"
       />
@@ -54,7 +52,7 @@ export const ValidationAndClear: Story = {
     return (
       <VStack gap={4}>
         <InputMask
-          mask="phone-us"
+          mask={PHONE}
           label="Phone number"
           value={value}
           onChange={setValue}
@@ -74,22 +72,22 @@ export const ValidationAndClear: Story = {
 export const States: Story = {
   render: () => (
     <VStack gap={4}>
+      <InputMask mask={PHONE} label="Disabled" value="5551234567" isDisabled />
       <InputMask
-        mask="phone-us"
-        label="Disabled"
-        value="5551234567"
-        isDisabled
-      />
-      <InputMask
-        mask="phone-us"
+        mask={PHONE}
         label="Disabled with reason"
         value="5551234567"
         isDisabled
         disabledMessage="Verified numbers cannot be edited"
       />
-      <InputMask mask="ssn" label="Read-only" value="123456789" isReadOnly />
       <InputMask
-        mask="credit-card"
+        mask={{pattern: '###-##-####'}}
+        label="Read-only"
+        value="123456789"
+        isReadOnly
+      />
+      <InputMask
+        mask={{pattern: '#### #### #### ####'}}
         label="Validating"
         value="4111111111111111"
         isLoading

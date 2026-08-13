@@ -21,9 +21,9 @@ export const docs = {
   props: [
     {
       name: 'mask',
-      type: "'phone-us' | 'zip-us' | 'ssn' | 'credit-card' | {pattern: string, placeholder?: string}",
+      type: '{pattern: string, placeholder?: string}',
       description:
-        "The mask to apply: a built-in named mask, or a custom pattern where `#` marks a digit slot and every other character is inserted literally (e.g. {pattern: '###-##-####'}).",
+        "The mask to apply: a pattern where `#` marks a digit slot and every other character is inserted literally (e.g. {pattern: '###-##-####'}). placeholder sets the ghost character for unfilled slots.",
       required: true,
     },
     {
@@ -37,8 +37,13 @@ export const docs = {
       name: 'value',
       type: 'string',
       description:
-        "The current value as raw digits only, no literal characters — '5551234567', never '(555) 123-4567'. The component renders the formatted view.",
-      required: true,
+        "The current value as raw digits only, no literal characters — '5551234567', never '(555) 123-4567'. The component renders the formatted view. Omit to leave the component uncontrolled.",
+    },
+    {
+      name: 'defaultValue',
+      type: 'string',
+      description:
+        'Initial raw digits for uncontrolled use, read once on mount. When value is provided the component is controlled and this prop is ignored.',
     },
     {
       name: 'onChange',
@@ -62,7 +67,7 @@ export const docs = {
       name: 'autoComplete',
       type: 'string',
       description:
-        "Overrides the autocomplete attribute derived from a named mask (phone-us → 'tel-national', zip-us → 'postal-code', ssn → 'off', credit-card → 'cc-number'; custom patterns → 'off').",
+        "Autocomplete attribute for the input. Defaults to 'off' so browser autofill does not fight the mask; pass e.g. 'tel-national' or 'postal-code' where autofill genuinely helps.",
     },
     {
       name: 'isLabelHidden',
@@ -175,7 +180,7 @@ export const docs = {
   ],
   usage: {
     description:
-      'A masked text input for values with a fixed shape: US phone numbers, ZIP codes, SSNs, card numbers, or any custom `#`-pattern. It constrains entry in real time — digits format as they are typed, literal characters (dashes, parens, spaces) insert themselves, and the remaining shape stays visible as a dimmed ghost after the caret. The caret behaves like a plain input: mid-value edits, backspacing through literals, and messy pastes all land in the right slot. The value contract is raw digits in, raw digits out; the component owns formatting. The expected format is announced to assistive technology via an auto-generated aria-describedby hint, and there is no placeholder prop — the ghost is the placeholder.',
+      'A masked text input for values with a fixed shape — phone numbers, ZIP codes, SSNs, card numbers — expressed as a `#`-digit pattern. It constrains entry in real time — digits format as they are typed, literal characters (dashes, parens, spaces) insert themselves, and the remaining shape stays visible as a dimmed ghost after the caret. The caret behaves like a plain input: mid-value edits, backspacing through literals, and messy pastes all land in the right slot. The value contract is raw digits in, raw digits out; the component owns formatting. The expected format is announced to assistive technology via an auto-generated aria-describedby hint, and there is no placeholder prop — the ghost is the placeholder.',
     bestPractices: [
       {
         guidance: true,
@@ -190,7 +195,7 @@ export const docs = {
       {
         guidance: true,
         description:
-          'Use the custom {pattern} escape hatch for fixed-shape values beyond the named masks (ZIP+4, serial numbers, sort codes).',
+          'Express any fixed shape as a {pattern} — ZIP+4, serial numbers, sort codes — and share recurring patterns as app-level constants.',
       },
       {
         guidance: false,
@@ -221,9 +226,8 @@ export const docsZh = {
   props: [
     {
       name: 'mask',
-      type: "'phone-us' | 'zip-us' | 'ssn' | 'credit-card' | {pattern: string, placeholder?: string}",
-      description:
-        '要应用的掩码：内置命名掩码，或自定义模式（`#` 表示数字位，其余字符按字面插入）。',
+      type: '{pattern: string, placeholder?: string}',
+      description: '要应用的掩码模式：`#` 表示数字位，其余字符按字面插入。',
       required: true,
     },
     {
@@ -236,8 +240,13 @@ export const docsZh = {
       name: 'value',
       type: 'string',
       description:
-        "当前值，仅包含原始数字（不含字面字符）——如 '5551234567'，而非 '(555) 123-4567'。",
-      required: true,
+        "当前值，仅包含原始数字（不含字面字符）——如 '5551234567'，而非 '(555) 123-4567'。省略则为非受控模式。",
+    },
+    {
+      name: 'defaultValue',
+      type: 'string',
+      description:
+        '非受控模式的初始原始数字，仅在挂载时读取一次；提供 value 时组件为受控，此项被忽略。',
     },
     {
       name: 'onChange',
@@ -276,7 +285,7 @@ export const docsZh = {
   ],
   usage: {
     description:
-      'A masked text input for values with a fixed shape: US phone numbers, ZIP codes, SSNs, card numbers, or any custom `#`-pattern. Digits format as they are typed; literals insert themselves; the remaining shape stays visible as a ghost. Raw digits in, raw digits out.',
+      'A masked text input for values with a fixed shape — phone numbers, ZIP codes, SSNs, card numbers — expressed as a `#`-digit pattern. Digits format as they are typed; literals insert themselves; the remaining shape stays visible as a ghost. Raw digits in, raw digits out.',
     bestPractices: [
       {
         guidance: true,
@@ -295,7 +304,7 @@ export const docsZh = {
 /** @type {import('@astryxdesign/cli/authoring').ComponentTranslationDoc} */
 export const docsDense = {
   description:
-    'Masked text input for fixed-shape values: formats digits while typing (phone/ZIP/SSN/card or custom # pattern); raw digits in and out.',
+    'Masked text input for fixed-shape values: formats digits while typing through a `#` pattern (phone, ZIP, SSN, card, …); raw digits in and out.',
   usage: {
     description:
       'Real-time input constraint: digits format as typed, literals (dashes, parens) auto-insert, remaining shape shows as an aria-hidden ghost after the caret. Caret survives mid-value edits, backspace-through-literals, and messy pastes. value/onChange carry raw digits only; the component owns formatting. Format announced via auto aria-describedby hint. No placeholder prop — the ghost is the placeholder.',
@@ -318,16 +327,18 @@ export const docsDense = {
     ],
   },
   propDescriptions: {
-    mask: "Named mask ('phone-us'|'zip-us'|'ssn'|'credit-card') or {pattern, placeholder?} where # = digit slot, rest literal.",
+    mask: '{pattern, placeholder?} where # = digit slot, rest literal.',
     label: 'Label text; always rendered for a11y.',
-    value: "Raw digits only ('5551234567'), never formatted.",
+    value:
+      "Raw digits only ('5551234567'), never formatted; omit for uncontrolled.",
+    defaultValue: 'Initial raw digits for uncontrolled use; value wins.',
     onChange:
       'Fires with raw digits when they change; rejected keystrokes do not fire.',
     changeAction:
       'Async action after onChange; optimistic + spinner while pending; rejection settles, reverts, reports via devError.',
     formatHint:
       "Auto 'Format: (555) 555-5555' describedby hint; string replaces, false omits.",
-    autoComplete: 'Overrides the mask-derived autocomplete attribute.',
+    autoComplete: "Autocomplete attribute; default 'off'.",
     hasClear: 'Clear button when value set; clears and refocuses.',
     status:
       'Validation status; error sets aria-invalid; message joins aria-describedby.',

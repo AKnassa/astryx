@@ -11,33 +11,19 @@
  * - /packages/lab/src/InputMask/InputMask.tsx
  */
 
-export type NamedMask = 'phone-us' | 'zip-us' | 'ssn' | 'credit-card';
-
-export interface CustomMask {
+export interface MaskProp {
   /** Mask pattern: `#` is a digit slot, every other character is a literal. */
   pattern: string;
   /** Character shown for unfilled slots in the ghost hint. @default '_' */
   placeholder?: string;
 }
 
-export type MaskProp = NamedMask | CustomMask;
-
 export interface MaskDefinition {
   pattern: string;
   placeholder: string;
 }
 
-export const NAMED_MASKS: Record<NamedMask, MaskDefinition> = {
-  'phone-us': {pattern: '(###) ###-####', placeholder: '_'},
-  'zip-us': {pattern: '#####', placeholder: '_'},
-  ssn: {pattern: '###-##-####', placeholder: '_'},
-  'credit-card': {pattern: '#### #### #### ####', placeholder: '_'},
-};
-
 export function resolveMask(mask: MaskProp): MaskDefinition {
-  if (typeof mask === 'string') {
-    return NAMED_MASKS[mask];
-  }
   return {pattern: mask.pattern, placeholder: mask.placeholder ?? '_'};
 }
 

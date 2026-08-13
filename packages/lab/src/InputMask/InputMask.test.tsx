@@ -18,6 +18,10 @@ import {describe, expect, it, vi} from 'vitest';
 
 import {InputMask, type InputMaskProps} from './InputMask';
 
+// Common shapes from the RFC, as plain patterns — there are no named presets.
+const PHONE = {pattern: '(###) ###-####'};
+const SSN = {pattern: '###-##-####'};
+
 type HarnessProps = Omit<InputMaskProps, 'value' | 'onChange'> & {
   initialValue?: string;
   onChange?: InputMaskProps['onChange'];
@@ -42,11 +46,18 @@ function getInput(label = 'Phone') {
 }
 
 describe('InputMask rendering', () => {
-  it('renders a labeled input with numeric inputMode and mask-derived autocomplete', () => {
-    render(<Controlled mask="phone-us" label="Phone" />);
+  it('renders a labeled input with numeric inputMode and autocomplete off', () => {
+    render(<Controlled mask={PHONE} label="Phone" />);
     const input = getInput();
     expect(input).toHaveAttribute('inputmode', 'numeric');
-    expect(input).toHaveAttribute('autocomplete', 'tel-national');
+    expect(input).toHaveAttribute('autocomplete', 'off');
+  });
+
+  it('passes an explicit autoComplete through to the input', () => {
+    render(
+      <Controlled mask={PHONE} label="Phone" autoComplete="tel-national" />,
+    );
+    expect(getInput()).toHaveAttribute('autocomplete', 'tel-national');
   });
 });
 
@@ -54,7 +65,7 @@ describe('InputMask typing', () => {
   it('formats digits as they are typed and inserts literals eagerly', async () => {
     const user = userEvent.setup();
     const onChange = vi.fn();
-    render(<Controlled mask="phone-us" label="Phone" onChange={onChange} />);
+    render(<Controlled mask={PHONE} label="Phone" onChange={onChange} />);
     const input = getInput();
 
     await user.type(input, '555');
@@ -71,7 +82,7 @@ describe('InputMask typing', () => {
   it('formats a complete phone number', async () => {
     const user = userEvent.setup();
     const onChange = vi.fn();
-    render(<Controlled mask="phone-us" label="Phone" onChange={onChange} />);
+    render(<Controlled mask={PHONE} label="Phone" onChange={onChange} />);
     const input = getInput();
 
     await user.type(input, '5551234567');
@@ -83,7 +94,7 @@ describe('InputMask typing', () => {
   it('ignores non-digit keystrokes entirely', async () => {
     const user = userEvent.setup();
     const onChange = vi.fn();
-    render(<Controlled mask="phone-us" label="Phone" onChange={onChange} />);
+    render(<Controlled mask={PHONE} label="Phone" onChange={onChange} />);
     const input = getInput();
 
     await user.type(input, 'abc');
@@ -97,7 +108,7 @@ describe('InputMask typing', () => {
     const onChange = vi.fn();
     render(
       <Controlled
-        mask="phone-us"
+        mask={PHONE}
         label="Phone"
         initialValue="5551234567"
         onChange={onChange}
@@ -116,7 +127,7 @@ describe('InputMask typing', () => {
     const onChange = vi.fn();
     render(
       <Controlled
-        mask="phone-us"
+        mask={PHONE}
         label="Phone"
         initialValue="555123"
         onChange={onChange}
@@ -142,7 +153,7 @@ describe('InputMask deleting', () => {
     const onChange = vi.fn();
     render(
       <Controlled
-        mask="phone-us"
+        mask={PHONE}
         label="Phone"
         initialValue="555123"
         onChange={onChange}
@@ -165,7 +176,7 @@ describe('InputMask deleting', () => {
     const onChange = vi.fn();
     render(
       <Controlled
-        mask="phone-us"
+        mask={PHONE}
         label="Phone"
         initialValue="555123"
         onChange={onChange}
@@ -187,7 +198,7 @@ describe('InputMask paste', () => {
   it('pastes an already-formatted value', async () => {
     const user = userEvent.setup();
     const onChange = vi.fn();
-    render(<Controlled mask="phone-us" label="Phone" onChange={onChange} />);
+    render(<Controlled mask={PHONE} label="Phone" onChange={onChange} />);
     const input = getInput();
 
     await user.click(input);
@@ -200,7 +211,7 @@ describe('InputMask paste', () => {
   it('strips junk from a messy paste and clamps to capacity', async () => {
     const user = userEvent.setup();
     const onChange = vi.fn();
-    render(<Controlled mask="ssn" label="SSN" onChange={onChange} />);
+    render(<Controlled mask={SSN} label="SSN" onChange={onChange} />);
     const input = getInput('SSN');
 
     await user.click(input);
@@ -222,7 +233,7 @@ describe('InputMask a11y & Field', () => {
   it('wires the description and the auto-generated format hint into aria-describedby', () => {
     render(
       <Controlled
-        mask="phone-us"
+        mask={PHONE}
         label="Phone"
         description="Work number preferred"
       />,
@@ -235,7 +246,7 @@ describe('InputMask a11y & Field', () => {
   it('accepts a custom format hint text', () => {
     render(
       <Controlled
-        mask="ssn"
+        mask={SSN}
         label="SSN"
         formatHint="Nine digits, dashes optional"
       />,
@@ -247,19 +258,19 @@ describe('InputMask a11y & Field', () => {
   });
 
   it('omits the format hint when formatHint is false', () => {
-    render(<Controlled mask="ssn" label="SSN" formatHint={false} />);
+    render(<Controlled mask={SSN} label="SSN" formatHint={false} />);
     expect(screen.queryByText(/^Format:/)).not.toBeInTheDocument();
   });
 
   it('shows the remaining mask as an aria-hidden ghost while typing', () => {
-    render(<Controlled mask="phone-us" label="Phone" initialValue="555" />);
+    render(<Controlled mask={PHONE} label="Phone" initialValue="555" />);
     const ghost = document.querySelector('[data-inputmask-ghost]');
     expect(ghost?.textContent).toBe('___-____');
     expect(ghost?.closest('[aria-hidden="true"]')).not.toBeNull();
   });
 
   it('ghost shows the full pattern when the value is empty', () => {
-    render(<Controlled mask="phone-us" label="Phone" />);
+    render(<Controlled mask={PHONE} label="Phone" />);
     expect(document.querySelector('[data-inputmask-ghost]')?.textContent).toBe(
       '(___) ___-____',
     );
@@ -268,7 +279,7 @@ describe('InputMask a11y & Field', () => {
   it('sets aria-invalid and describes the input by the status message', () => {
     render(
       <Controlled
-        mask="phone-us"
+        mask={PHONE}
         label="Phone"
         status={{type: 'error', message: 'Enter 10 digits'}}
       />,
@@ -281,14 +292,14 @@ describe('InputMask a11y & Field', () => {
   });
 
   it('marks the themed wrapper with the input-mask class', () => {
-    const {container} = render(<Controlled mask="phone-us" label="Phone" />);
+    const {container} = render(<Controlled mask={PHONE} label="Phone" />);
     expect(container.querySelector('.astryx-input-mask')).not.toBeNull();
   });
 });
 
 describe('InputMask states', () => {
   it('disables natively with isDisabled', () => {
-    render(<Controlled mask="phone-us" label="Phone" isDisabled />);
+    render(<Controlled mask={PHONE} label="Phone" isDisabled />);
     expect(getInput()).toBeDisabled();
   });
 
@@ -297,7 +308,7 @@ describe('InputMask states', () => {
     const onChange = vi.fn();
     render(
       <Controlled
-        mask="phone-us"
+        mask={PHONE}
         label="Phone"
         isDisabled
         disabledMessage="No editing during sync"
@@ -317,7 +328,7 @@ describe('InputMask states', () => {
     const onChange = vi.fn();
     render(
       <Controlled
-        mask="phone-us"
+        mask={PHONE}
         label="Phone"
         isReadOnly
         initialValue="555"
@@ -336,7 +347,7 @@ describe('InputMask states', () => {
     const onChange = vi.fn();
     render(
       <Controlled
-        mask="phone-us"
+        mask={PHONE}
         label="Phone"
         hasClear
         initialValue="5551234567"
@@ -355,7 +366,7 @@ describe('InputMask states', () => {
     const onEnter = vi.fn();
     render(
       <Controlled
-        mask="phone-us"
+        mask={PHONE}
         label="Phone"
         onEnter={onEnter}
         htmlName="phone"
@@ -380,7 +391,7 @@ describe('InputMask changeAction', () => {
     );
     render(
       <InputMask
-        mask="phone-us"
+        mask={PHONE}
         label="Phone"
         value=""
         changeAction={changeAction}
@@ -415,7 +426,7 @@ describe('InputMask changeAction', () => {
     );
     render(
       <InputMask
-        mask="phone-us"
+        mask={PHONE}
         label="Phone"
         value=""
         changeAction={changeAction}
@@ -440,10 +451,109 @@ describe('InputMask changeAction', () => {
   });
 });
 
+describe('InputMask uncontrolled', () => {
+  it('types and formats without value or onChange', async () => {
+    const user = userEvent.setup();
+    render(<InputMask mask={PHONE} label="Phone" />);
+    const input = getInput();
+
+    await user.type(input, '5551234567');
+
+    expect(input).toHaveValue('(555) 123-4567');
+  });
+
+  it('seeds from defaultValue and still reports raw digits to onChange', async () => {
+    const user = userEvent.setup();
+    const onChange = vi.fn();
+    render(
+      <InputMask
+        mask={PHONE}
+        label="Phone"
+        defaultValue="555"
+        onChange={onChange}
+      />,
+    );
+    const input = getInput();
+    expect(input).toHaveValue('(555) ');
+
+    await user.type(input, '123');
+
+    expect(input).toHaveValue('(555) 123-');
+    expect(onChange).toHaveBeenLastCalledWith('555123', expect.anything());
+  });
+
+  it('a provided value wins over defaultValue and stays authoritative', async () => {
+    const user = userEvent.setup();
+    render(
+      <InputMask
+        mask={PHONE}
+        label="Phone"
+        value="1234567890"
+        defaultValue="555"
+      />,
+    );
+    const input = getInput();
+    expect(input).toHaveValue('(123) 456-7890');
+
+    await user.type(input, '9', {
+      initialSelectionStart: 0,
+      initialSelectionEnd: 0,
+    });
+
+    expect(input).toHaveValue('(123) 456-7890');
+  });
+
+  it('clears via the clear button without an onChange owner', async () => {
+    const user = userEvent.setup();
+    render(
+      <InputMask
+        mask={PHONE}
+        label="Phone"
+        hasClear
+        defaultValue="5551234567"
+      />,
+    );
+
+    await user.click(screen.getByRole('button', {name: /clear phone/i}));
+
+    expect(getInput()).toHaveValue('');
+    expect(getInput()).toHaveFocus();
+  });
+
+  it('keeps the typed value after changeAction settles and shows busy while pending', async () => {
+    const user = userEvent.setup();
+    let resolveAction: () => void = () => {};
+    const changeAction = vi.fn(
+      () =>
+        new Promise<void>(resolve => {
+          resolveAction = resolve;
+        }),
+    );
+    render(
+      <InputMask mask={PHONE} label="Phone" changeAction={changeAction} />,
+    );
+    const input = getInput();
+
+    await user.type(input, '5');
+
+    expect(changeAction).toHaveBeenCalledWith('5', expect.anything());
+    expect(input).toHaveValue('(5');
+    expect(input).toHaveAttribute('aria-busy', 'true');
+
+    await act(async () => {
+      resolveAction();
+      await Promise.resolve();
+    });
+
+    expect(input).toHaveValue('(5');
+    expect(input).not.toHaveAttribute('aria-busy');
+  });
+});
+
 describe('InputMask composition', () => {
   it('suspends masking during IME composition and normalizes on compositionend', () => {
     const onChange = vi.fn();
-    render(<Controlled mask="phone-us" label="Phone" onChange={onChange} />);
+    render(<Controlled mask={PHONE} label="Phone" onChange={onChange} />);
     const input = getInput();
 
     fireEvent.compositionStart(input);
