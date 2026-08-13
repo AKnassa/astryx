@@ -285,3 +285,16 @@ export {
   URL_MATCHER,
   EMAIL_MATCHER,
 } from './RichTextEditor';
+
+// InputMask — masked text input for fixed-shape values (RFC facebook/astryx#4946)
+// Formats while typing (phone/ZIP/SSN/card or a custom `#` pattern); value and
+// onChange carry raw digits only.
+export {
+  InputMask,
+  NAMED_MASKS,
+  type InputMaskProps,
+  type InputMaskSize,
+  type CustomMask,
+  type MaskProp,
+  type NamedMask,
+} from './InputMask';
