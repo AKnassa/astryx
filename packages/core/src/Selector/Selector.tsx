@@ -33,6 +33,7 @@ import {usePopover} from '../Popover/usePopover';
 import {useTooltip} from '../Tooltip';
 import {Icon, renderIconSlot, type IconType} from '../Icon';
 import {useIndicator} from '../Indicator';
+import type {IndicatorPosition} from '../Indicator';
 import type {IconName} from '../Icon';
 import {
   Field,
@@ -46,7 +47,7 @@ import {Divider} from '../Divider';
 import {layerAnimations} from '../Layer/layerAnimations.stylex';
 import type {LayerPlacement} from '../Layer/useLayer';
 import {Spinner} from '../Spinner';
-import {TextInput} from '../TextInput';
+import {PanelSearchInput} from '../Field/PanelSearchInput';
 import {useAnnounce} from '../hooks/useAnnounce';
 import {
   colorVars,
@@ -76,6 +77,7 @@ import {useSize} from '../SizeContext/SizeContext';
 import type {BaseProps} from '../BaseProps';
 import type {SizeValue} from '../utils/types';
 import {themeProps} from '../utils/themeProps';
+import {focusOutlineStyles} from '../utils/focusOutline.stylex';
 import {stableClassName} from '../naming';
 import {groupStyles} from '../InputGroup/groupStyles';
 import {useInputGroup} from '../InputGroup/InputGroupContext';
@@ -179,14 +181,6 @@ const styles = stylex.create({
       ':focus-within': 'none',
     },
     fontWeight: fontWeightVars['--font-weight-medium'],
-    outline: {
-      default: 'none',
-      ':has(:focus-visible)': `2px solid ${colorVars['--color-accent']}`,
-    },
-    outlineOffset: {
-      default: '0',
-      ':has(:focus-visible)': '3px',
-    },
     transitionProperty:
       'background-image, background-color, color, opacity, transform',
     transform: {
@@ -215,11 +209,6 @@ const styles = stylex.create({
     color: 'inherit',
     cursor: 'pointer',
     borderRadius: radiusVars['--radius-element'],
-    outline: {
-      default: 'none',
-      ':focus-visible': `${borderVars['--border-width']} solid ${colorVars['--color-accent']}`,
-    },
-    outlineOffset: 1,
   },
 
   // Dropdown container
@@ -237,6 +226,11 @@ const styles = stylex.create({
     // pixel in the menu; the borderless ghost variant needs no correction.
     paddingInline: `calc(${spacingVars['--spacing-1']} + ${borderVars['--border-width']})`,
   },
+  // Same correction for the search row's gutter, so the search field and the
+  // option rows share one left edge.
+  searchRowInput: {
+    paddingInline: `calc(${spacingVars['--spacing-1']} + ${borderVars['--border-width']})`,
+  },
   dropdownHidden: {
     opacity: 0,
     transition: 'none',
@@ -245,15 +239,6 @@ const styles = stylex.create({
   // Popover container (for anchor positioning)
   popover: {
     minWidth: 'anchor-size(width)',
-  },
-  // Search field. The inner TextInput owns the border, focus ring, magnifier
-  // (startIcon), and clear button (hasClear); this wrapper only supplies the
-  // dropdown's inline/block padding around it.
-  searchWrapper: {
-    display: 'flex',
-    alignItems: 'center',
-    paddingInline: spacingVars['--spacing-2'],
-    paddingBlock: spacingVars['--spacing-1'],
   },
 
   // Empty state
@@ -265,9 +250,19 @@ const styles = stylex.create({
     fontSize: typeScaleVars['--text-label-size'],
   },
 
-  // Section divider with label
-  sectionDivider: {
-    marginBlock: spacingVars['--spacing-1'],
+  // Section heading. Plain secondary text, no rules — the same treatment
+  // DropdownMenu and CommandPaletteGroup already use for a group heading in a
+  // panel list. A labeled Divider (line–text–line) reads as a separator, and
+  // next to the search row's own divider it stacked two rules a few pixels
+  // apart.
+  sectionHeading: {
+    paddingBlock: spacingVars['--spacing-1'],
+    paddingInline: spacingVars['--spacing-2'],
+    fontFamily: typographyVars['--font-family-body'],
+    fontSize: typeScaleVars['--text-supporting-size'],
+    lineHeight: typeScaleVars['--text-supporting-leading'],
+    color: colorVars['--color-text-secondary'],
+    userSelect: 'none',
   },
 
   // Divider
@@ -300,6 +295,19 @@ const styles = stylex.create({
     gap: spacingVars['--spacing-2'],
     flex: 1,
     minWidth: 0,
+  },
+  // The mark's column, reserved on every row and at either position, so a row
+  // occupies the same geometry whether or not it is the chosen one — the
+  // default check draws nothing when unchecked, and without the column a list
+  // would indent (or truncate) its chosen row differently from the rest.
+  // `minWidth` rather than `width`: a theme can replace `check` with a larger
+  // indicator (a radio is 20px at `sm`), and the column has to grow with it.
+  itemMarkColumn: {
+    display: 'inline-flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
+    minWidth: '1rem',
   },
   itemCheckmark: {
     flexShrink: 0,
@@ -519,6 +527,16 @@ interface SelectorPropsBase<
   renderOption?: (option: SelectorOptionData) => ReactNode;
 
   /**
+   * Which edge of the option row carries the selected mark. `start` reserves a
+   * mark column ahead of every label so they stay aligned, the way a native
+   * menu does; `end` is the house convention shared with Typeahead and
+   * CommandPalette.
+   *
+   * @default 'end'
+   */
+  indicatorPosition?: IndicatorPosition;
+
+  /**
    * Whether to show a search input for filtering options.
    * @default false
    */
@@ -668,6 +686,7 @@ export function Selector<T extends SelectorOptionType>(
     startIcon,
     htmlName,
     renderOption,
+    indicatorPosition = 'end',
     hasSearch = false,
     searchPlaceholder: searchPlaceholderFromProps,
     placement,
@@ -706,7 +725,7 @@ export function Selector<T extends SelectorOptionType>(
   const inputGroup = useInputGroup();
 
   const [searchQuery, setSearchQuery] = useState('');
-  // A typed query shows TextInput's built-in clear (✕) button, which becomes
+  // A typed query shows the search row's clear (✕) button, which becomes
   // the next tab stop after the search input.
   const hasQuery = searchQuery.length > 0;
 
@@ -797,6 +816,9 @@ export function Selector<T extends SelectorOptionType>(
     // The popup's own role="listbox" is the exposed semantics; the trigger
     // keeps DOM focus, so wrapping it in a modal dialog would misrepresent it.
     role: 'none',
+    // The theme target belongs on the SURFACE that paints the popup, which
+    // `usePopover` owns — not on the scrolling list inside it.
+    surfaceTarget: 'selector-popup',
   });
 
   // Open dropdown on mount when isDefaultOpen is true
@@ -988,11 +1010,40 @@ export function Selector<T extends SelectorOptionType>(
       return null;
     }
     return (
-      <div
-        {...stylex.props(styles.searchWrapper)}
-        onKeyDown={e => {
-          // The clear (✕) button lives inside the TextInput, after the input in
-          // DOM order. When it is focused and the user tabs forward there is
+      <PanelSearchInput
+        ref={searchRef}
+        id={searchId}
+        // The search row is the panel's header: a magnifier, a borderless
+        // input, and the shared clear (✕) button. It deliberately does NOT
+        // render a bordered TextInput — the popup is already a bordered
+        // surface, and a field inside it drew a second box within that box.
+        label={t('@astryx.selector.searchOptions')}
+        // Same accessible name the TextInput's built-in clear produced
+        // ("Clear Search options"), so the affordance keeps its name while its
+        // chrome changes.
+        clearLabel={t('@astryx.textInput.clearLabel', {
+          label: t('@astryx.selector.searchOptions'),
+        })}
+        {...themeProps('selector-search')}
+        xstyle={variant !== 'ghost' && styles.searchRowInput}
+        // When hasSearch is set, focus moves into this input on open, so it —
+        // not the trigger — must be the combobox that reports the highlighted
+        // option via aria-activedescendant (comboboxes-4). A bare searchbox
+        // left the highlight silent to screen readers.
+        role="combobox"
+        aria-expanded={popover.isOpen}
+        aria-controls={listboxId}
+        aria-autocomplete="list"
+        aria-activedescendant={
+          popover.isOpen && highlightedIndex >= 0
+            ? getItemId(highlightedIndex)
+            : undefined
+        }
+        value={searchQuery}
+        onValueChange={handleSearchChange}
+        onContainerKeyDown={e => {
+          // The clear (✕) button lives inside the row, after the input in DOM
+          // order. When it is focused and the user tabs forward there is
           // nothing else in the popup, so dismiss it (Shift+Tab returns to the
           // input natively). Key events originating on the input are handled on
           // the input below; ignore them here so we don't double-dismiss.
@@ -1002,65 +1053,32 @@ export function Selector<T extends SelectorOptionType>(
           if (e.key === 'Tab' && !e.shiftKey) {
             onKeyDown(e);
           }
-        }}>
-        <TextInput
-          ref={searchRef}
-          id={searchId}
-          // The search field IS a TextInput: the leading magnifier is its
-          // `startIcon` and the trailing clear (✕) is its built-in `hasClear`
-          // (which resets the value and refocuses the input). We add no bespoke
-          // affordance chrome — the field just looks and behaves like every
-          // other Astryx input.
-          label={t('@astryx.selector.searchOptions')}
-          isLabelHidden
-          startIcon="search"
-          hasClear
-          size="sm"
-          // Fill the dropdown's width (minus the wrapper's inline padding) so
-          // the field is flush end-to-end rather than sized to its content.
-          width="100%"
-          // When hasSearch is set, focus moves into this input on open, so it —
-          // not the trigger — must be the combobox that reports the highlighted
-          // option via aria-activedescendant (comboboxes-4). A bare searchbox
-          // left the highlight silent to screen readers. role + aria-* pass
-          // through to the underlying <input> via BaseProps.
-          role="combobox"
-          aria-expanded={popover.isOpen}
-          aria-controls={listboxId}
-          aria-autocomplete="list"
-          aria-activedescendant={
-            popover.isOpen && highlightedIndex >= 0
-              ? getItemId(highlightedIndex)
-              : undefined
+        }}
+        onKeyDown={e => {
+          // Arrow keys navigate options; Enter selects; Escape closes.
+          // Home/End are left to the input for caret movement (APG editable
+          // combobox); PageUp/PageDown are the sanctioned substitute for
+          // jumping to the first/last option.
+          if (
+            e.key === 'ArrowDown' ||
+            e.key === 'ArrowUp' ||
+            e.key === 'PageUp' ||
+            e.key === 'PageDown' ||
+            e.key === 'Enter' ||
+            e.key === 'Escape'
+          ) {
+            onKeyDown(e);
+            return;
           }
-          value={searchQuery}
-          onChange={handleSearchChange}
-          onKeyDown={e => {
-            // Arrow keys navigate options; Enter selects; Escape closes.
-            // Home/End are left to the input for caret movement (APG editable
-            // combobox); PageUp/PageDown are the sanctioned substitute for
-            // jumping to the first/last option.
-            if (
-              e.key === 'ArrowDown' ||
-              e.key === 'ArrowUp' ||
-              e.key === 'PageUp' ||
-              e.key === 'PageDown' ||
-              e.key === 'Enter' ||
-              e.key === 'Escape'
-            ) {
-              onKeyDown(e);
-              return;
-            }
-            // Tab: when a query is showing the clear (✕) button, forward-tab
-            // moves focus to it (keeping the popup open) so the affordance is
-            // keyboard-reachable. Every other Tab dismisses the popup as usual.
-            if (e.key === 'Tab' && (e.shiftKey || !hasQuery)) {
-              onKeyDown(e);
-            }
-          }}
-          placeholder={searchPlaceholder}
-        />
-      </div>
+          // Tab: when a query is showing the clear (✕) button, forward-tab
+          // moves focus to it (keeping the popup open) so the affordance is
+          // keyboard-reachable. Every other Tab dismisses the popup as usual.
+          if (e.key === 'Tab' && (e.shiftKey || !hasQuery)) {
+            onKeyDown(e);
+          }
+        }}
+        placeholder={searchPlaceholder}
+      />
     );
   }, [
     hasSearch,
@@ -1074,6 +1092,7 @@ export function Selector<T extends SelectorOptionType>(
     popover.isOpen,
     highlightedIndex,
     getItemId,
+    variant,
     t,
   ]);
 
@@ -1087,6 +1106,45 @@ export function Selector<T extends SelectorOptionType>(
     (item: SelectorOptionData, flatIndex: number) => {
       const isHighlighted = flatIndex === highlightedIndex;
       const isSelected = item.value === normalizedValue;
+
+      /*
+       * Rendered UNCONDITIONALLY, with the state passed down: the default
+       * check draws nothing when unchecked, but a theme that replaces the
+       * `check` indicator with a radio needs the unselected state to draw
+       * its empty circle. `{isSelected && …}` would make that impossible.
+       *
+       * `selector-check` stays the stable target for the mark's position
+       * in the row; the indicator owns what the mark looks like.
+       */
+      const mark = (
+        <span {...stylex.props(styles.itemMarkColumn)}>
+          <SelectionMark
+            state={isSelected ? 'checked' : 'unchecked'}
+            size="sm"
+            isDisabled={item.disabled ?? false}
+            {...themeProps('selector-check')}
+          />
+        </span>
+      );
+
+      const optionContent = (
+        <span {...stylex.props(styles.itemContent)}>
+          {renderOption ? renderOption(item) : <DefaultOption option={item} />}
+        </span>
+      );
+
+      const content =
+        indicatorPosition === 'start' ? (
+          <>
+            {mark}
+            {optionContent}
+          </>
+        ) : (
+          <>
+            {optionContent}
+            {mark}
+          </>
+        );
 
       return (
         <div
@@ -1104,33 +1162,13 @@ export function Selector<T extends SelectorOptionType>(
             isSelected && styles.itemSelected,
             item.disabled && styles.itemDisabled,
           )}>
-          <span {...stylex.props(styles.itemContent)}>
-            {renderOption ? (
-              renderOption(item)
-            ) : (
-              <DefaultOption option={item} />
-            )}
-          </span>
-          {/*
-           * Rendered UNCONDITIONALLY, with the state passed down: the default
-           * check draws nothing when unchecked, but a theme that replaces the
-           * `check` indicator with a radio needs the unselected state to draw
-           * its empty circle. `{isSelected && …}` would make that impossible.
-           *
-           * `selector-check` stays the stable target for the mark's position
-           * in the row; the indicator owns what the mark looks like.
-           */}
-          <SelectionMark
-            state={isSelected ? 'checked' : 'unchecked'}
-            size="sm"
-            isDisabled={item.disabled ?? false}
-            {...themeProps('selector-check')}
-          />
+          {content}
         </div>
       );
     },
     [
       renderOption,
+      indicatorPosition,
       highlightedIndex,
       size,
       normalizedValue,
@@ -1192,17 +1230,23 @@ export function Selector<T extends SelectorOptionType>(
         if (sectionItems.length === 0) {
           continue;
         }
-        if (option.title) {
-          elements.push(
-            <Divider
-              key={`section-divider-${i}`}
-              label={option.title}
-              xstyle={styles.sectionDivider}
-            />,
-          );
-        }
+        // The heading lives INSIDE the group and is aria-hidden: the group
+        // already carries the title as its accessible name, so exposing the
+        // text again would announce it twice. This also keeps role="listbox"'s
+        // children to option/group only — the old labeled Divider sat in the
+        // listbox as a stray role="separator".
         elements.push(
           <div key={`section-${i}`} role="group" aria-label={option.title}>
+            {option.title && (
+              <div
+                aria-hidden="true"
+                {...mergeProps(
+                  themeProps('selector-section-heading'),
+                  stylex.props(styles.sectionHeading),
+                )}>
+                {option.title}
+              </div>
+            )}
             {sectionItems}
           </div>,
         );
@@ -1251,6 +1295,7 @@ export function Selector<T extends SelectorOptionType>(
             styles.triggerContainer,
             sizeStyles[size],
             variant === 'ghost' && styles.triggerGhost,
+            variant === 'ghost' && focusOutlineStyles.focusWithin,
             isDisabled && inputWrapperStyles.disabled,
             variant === 'ghost' && isDisabled && styles.triggerGhostDisabled,
             !selectedItem && styles.triggerPlaceholder,
@@ -1338,7 +1383,10 @@ export function Selector<T extends SelectorOptionType>(
               aria-label={t(STATUS_BUTTON_LABEL_KEY[status.type])}
               aria-describedby={statusTooltip.describedBy}
               onClick={e => e.stopPropagation()}
-              {...stylex.props(styles.statusButton)}>
+              {...stylex.props(
+                focusOutlineStyles.focusVisible,
+                styles.statusButton,
+              )}>
               <Icon
                 icon={STATUS_ICON_MAP[status.type]}
                 size="sm"
@@ -1383,6 +1431,12 @@ export function Selector<T extends SelectorOptionType>(
         hasSearch ? (
           <div>
             {renderSearch()}
+            {/*
+              Separates the header from the options and spans the panel: the
+              search row and the listbox each hold their own inline padding,
+              the line does not, so it reads as the panel's own edge.
+            */}
+            <Divider />
             <div
               ref={listboxRef}
               id={listboxId}
@@ -1412,6 +1466,12 @@ export function Selector<T extends SelectorOptionType>(
         {
           placement: popoverPlacement,
           alignment: 'start',
+          // The system's standard menu clearance, except in overlay mode:
+          // there the measured negative margin owns the block geometry and
+          // the menu is meant to sit on the trigger, not clear it.
+          offset: shouldOverlaySelectedItem
+            ? undefined
+            : spacingVars['--spacing-1'],
           xstyle: [styles.popover, layerAnimations[popoverPlacement]],
           style: popoverOffsetStyle,
         },
