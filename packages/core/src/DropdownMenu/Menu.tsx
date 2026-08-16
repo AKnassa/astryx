@@ -39,7 +39,7 @@ import React, {
 import * as stylex from '@stylexjs/stylex';
 import {useListFocus} from '../hooks/useListFocus';
 import {useTypeahead} from '../hooks/useTypeahead';
-import {mergeProps, mergeRefs} from '../utils';
+import {composeEventHandlers, mergeProps, mergeRefs} from '../utils';
 import type {BaseProps} from '../BaseProps';
 import {themeProps} from '../utils/themeProps';
 import {
@@ -155,6 +155,7 @@ export function Menu({
   xstyle,
   id,
   ref,
+  onKeyDown: onKeyDownProp,
   ...rest
 }: MenuProps) {
   const wasOpenRef = useRef(false);
@@ -184,12 +185,22 @@ export function Menu({
   });
 
   useEffect(() => {
-    const justOpened = isOpen && !wasOpenRef.current;
-    wasOpenRef.current = isOpen;
-    if (!justOpened || focusOnOpen === 'none') {
+    if (!isOpen) {
+      wasOpenRef.current = false;
+      return;
+    }
+    // This open was already handled — a prop change is not a re-open.
+    if (wasOpenRef.current || focusOnOpen === 'none') {
+      wasOpenRef.current = true;
       return;
     }
     const frameId = requestAnimationFrame(() => {
+      // Mark the open handled only once the frame actually runs. React
+      // double-invokes mount effects under StrictMode and re-runs them on
+      // Fast Refresh; committing before the frame would make the cancelled
+      // first pass swallow the transition, and a Menu mounted already open
+      // (the default `isOpen`) would never take focus.
+      wasOpenRef.current = true;
       const node = listRef.current;
       if (node == null) {
         return;
@@ -197,11 +208,7 @@ export function Menu({
       // The ancestor popover may already have closed (light-dismiss) before
       // this frame. Don't steal focus back from the trigger.
       const layer = node.closest('[popover]');
-      if (
-        layer != null &&
-        !layer.matches(':popover-open') &&
-        !layer.hasAttribute('popover-open')
-      ) {
+      if (layer != null && !layer.matches(':popover-open')) {
         return;
       }
       if (focusOnOpen === 'container' || !focusFirst()) {
@@ -240,6 +247,13 @@ export function Menu({
     [listNavKeyDown, onClose, typeahead, ownsEvent],
   );
 
+  // `onKeyDown` is part of BaseProps, so a consumer may pass one. Run theirs
+  // first; calling preventDefault opts that key out of menu navigation.
+  const keyDown = useMemo(
+    () => composeEventHandlers(onKeyDownProp, handleKeyDown),
+    [onKeyDownProp, handleKeyDown],
+  );
+
   const contextValue = useMemo<DropdownMenuContextValue>(
     () => ({closeMenu: onClose, menuSize: size}),
     [onClose, size],
@@ -253,7 +267,7 @@ export function Menu({
       role="menu"
       tabIndex={-1}
       aria-label={label}
-      onKeyDown={handleKeyDown}
+      onKeyDown={keyDown}
       {...mergeProps(
         themeProps('dropdown-menu'),
         stylex.props(styles.menu, xstyle),

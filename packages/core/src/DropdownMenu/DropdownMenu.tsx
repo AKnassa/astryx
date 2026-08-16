@@ -390,10 +390,10 @@ export function DropdownMenu({
   const menuContent =
     props.items !== undefined ? renderDropdownItems(items) : children;
 
-  const menuLabel =
-    typeof button.label === 'string'
-      ? button.label
-      : t(DEFAULT_BUTTON_I18N_KEY);
+  // `ButtonProps['label']` is a string, and `button` already falls back to the
+  // translated default above, so the trigger's label is always a usable
+  // accessible name for the menu (menus-13).
+  const menuLabel = button.label;
 
   return (
     <>
@@ -423,7 +423,7 @@ export function DropdownMenu({
 
       {popover.render(
         <Menu
-          {...(rest as Record<string, unknown>)}
+          {...rest}
           ref={menuRef}
           label={menuLabel}
           onClose={closeMenu}
