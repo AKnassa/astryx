@@ -125,6 +125,25 @@ describe('useResizable persistence', () => {
     expect(result.current.size).toBe(300);
   });
 
+  it('does not clobber the saved width when collapse is called twice', () => {
+    const onCollapseChange = vi.fn();
+    const {result} = renderHook(() =>
+      useResizable({...BASE_CONFIG, collapsible: true, onCollapseChange}),
+    );
+    act(() => result.current.resize(300));
+    act(() => result.current.collapse());
+    act(() => result.current.collapse());
+
+    expect(JSON.parse(localStorage.getItem(KEY) ?? 'null')).toEqual({
+      size: 300,
+      isCollapsed: true,
+    });
+    // The second call is inert, so it must not re-notify either.
+    expect(onCollapseChange).toHaveBeenCalledTimes(1);
+    act(() => result.current.expand());
+    expect(result.current.size).toBe(300);
+  });
+
   it('persists the pre-drag width when dragging to collapse', () => {
     const {result} = renderHook(() =>
       useResizable({...BASE_CONFIG, collapsible: true}),
@@ -220,6 +239,116 @@ describe('useResizable persistence', () => {
     act(() => result.current.resize(300));
     act(() => result.current.resize(320));
     expect(onCollapseChange).not.toHaveBeenCalled();
+  });
+
+  it('fires onCollapseChange once for a drag that keeps moving below the threshold', () => {
+    const onCollapseChange = vi.fn();
+    const {result} = renderHook(() =>
+      useResizable({...BASE_CONFIG, collapsible: true, onCollapseChange}),
+    );
+    act(() => result.current.resize(300));
+    onCollapseChange.mockClear();
+
+    act(() => result.current.props._onResizeStart());
+    act(() => result.current.props._onResizeMove(-270));
+    act(() => result.current.props._onResizeMove(-272));
+
+    expect(result.current.isCollapsed).toBe(true);
+    expect(onCollapseChange).toHaveBeenCalledTimes(1);
+    expect(onCollapseChange).toHaveBeenCalledWith(true);
+  });
+
+  it('notifies once when expand and resize run in the same tick', () => {
+    const onCollapseChange = vi.fn();
+    const {result} = renderHook(() =>
+      useResizable({...BASE_CONFIG, collapsible: true, onCollapseChange}),
+    );
+    act(() => result.current.collapse());
+    onCollapseChange.mockClear();
+
+    act(() => {
+      result.current.expand();
+      result.current.resize(280);
+    });
+
+    expect(onCollapseChange).toHaveBeenCalledTimes(1);
+    expect(onCollapseChange).toHaveBeenCalledWith(false);
+    expect(result.current.isCollapsed).toBe(false);
+  });
+
+  it('reports the final state when collapse and resize run in the same tick', () => {
+    const onCollapseChange = vi.fn();
+    const {result} = renderHook(() =>
+      useResizable({...BASE_CONFIG, collapsible: true, onCollapseChange}),
+    );
+    act(() => result.current.resize(300));
+    onCollapseChange.mockClear();
+
+    act(() => {
+      result.current.collapse();
+      result.current.resize(280);
+    });
+
+    // The region ends expanded, so the consumer must not be left believing
+    // it collapsed.
+    expect(result.current.isCollapsed).toBe(false);
+    expect(onCollapseChange.mock.calls).toEqual([[true], [false]]);
+  });
+
+  it('handles a whole drag gesture through the props captured at pointer down', () => {
+    const onCollapseChange = vi.fn();
+    const {result} = renderHook(() =>
+      useResizable({
+        ...BASE_CONFIG,
+        collapsible: true,
+        collapsedSize: 160,
+        onCollapseChange,
+      }),
+    );
+    act(() => result.current.resize(300));
+    onCollapseChange.mockClear();
+
+    // ResizeHandle registers its pointermove listener once at pointer down,
+    // so the entire gesture runs against this one props object.
+    const gesture = result.current.props;
+    act(() => gesture._onResizeStart());
+    act(() => gesture._onResizeMove(-200));
+    act(() => gesture._onResizeMove(-210));
+
+    expect(result.current.isCollapsed).toBe(true);
+    expect(onCollapseChange).toHaveBeenCalledTimes(1);
+
+    // Dragging back above the threshold in the same gesture re-expands.
+    act(() => gesture._onResizeMove(50));
+    expect(result.current.isCollapsed).toBe(false);
+    expect(result.current.size).toBe(350);
+    expect(onCollapseChange.mock.calls).toEqual([[true], [false]]);
+  });
+
+  it('keeps the restore width when a drag from collapsed crosses out and back', () => {
+    const {result} = renderHook(() =>
+      useResizable({...BASE_CONFIG, collapsible: true, collapsedSize: 160}),
+    );
+    act(() => result.current.resize(300));
+    act(() => result.current.collapse());
+
+    // One gesture: start on the collapsed rail, pull out past the
+    // threshold, then push back under it.
+    const gesture = result.current.props;
+    act(() => gesture._onResizeStart());
+    act(() => gesture._onResizeMove(200));
+    act(() => gesture._onResizeMove(100));
+
+    expect(result.current.isCollapsed).toBe(true);
+    // The width saved before the original collapse survives the round
+    // trip — the gesture began at 0, and 0 must never become the width
+    // expand() restores (#4790).
+    expect(JSON.parse(localStorage.getItem(KEY) ?? 'null')).toEqual({
+      size: 300,
+      isCollapsed: true,
+    });
+    act(() => result.current.expand());
+    expect(result.current.size).toBe(300);
   });
 
   it('treats an explicit regions: undefined as a single-region config', () => {
