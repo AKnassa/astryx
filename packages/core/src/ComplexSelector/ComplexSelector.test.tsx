@@ -14,6 +14,9 @@ import {beforeEach, describe, expect, it, vi} from 'vitest';
 import {act, fireEvent, render, screen, waitFor} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import {ComplexSelector, type ComplexSelectorHandle} from './ComplexSelector';
+import {Menu} from '../DropdownMenu/Menu';
+import {DropdownMenuItem} from '../DropdownMenu/DropdownMenuItem';
+import {DropdownMenuSubMenu} from '../DropdownMenu/DropdownMenuSubMenu';
 
 const originalMatches = HTMLElement.prototype.matches;
 
@@ -416,5 +419,96 @@ describe('ComplexSelector popup theme target', () => {
     expect(
       document.querySelector('.astryx-complex-selector-popup'),
     ).not.toBeNull();
+  });
+});
+
+describe('ComplexSelector popupRole', () => {
+  it('defaults to a dialog popup and aria-haspopup="dialog"', async () => {
+    const user = userEvent.setup();
+    render(
+      <ComplexSelector label="Fruit blend" value="Apple" triggerLabel="Apple">
+        {() => <button type="button">Done</button>}
+      </ComplexSelector>,
+    );
+
+    const trigger = screen.getByRole('button', {name: 'Fruit blend'});
+    expect(trigger).toHaveAttribute('aria-haspopup', 'dialog');
+    await user.click(trigger);
+    expect(screen.getByRole('dialog', h)).toBeInTheDocument();
+  });
+
+  it('drops the dialog wrapper when popupRole is none', async () => {
+    const user = userEvent.setup();
+    render(
+      <ComplexSelector
+        label="Model"
+        value="GPT-4"
+        triggerLabel="GPT-4"
+        popupRole="none">
+        {() => (
+          <div role="menu" aria-label="Model">
+            <div role="menuitem">GPT-4</div>
+          </div>
+        )}
+      </ComplexSelector>,
+    );
+
+    const trigger = screen.getByRole('button', {name: 'Model'});
+    expect(trigger).toHaveAttribute('aria-haspopup', 'true');
+    await user.click(trigger);
+    expect(screen.queryByRole('dialog', h)).not.toBeInTheDocument();
+    expect(screen.getByRole('menu', {name: 'Model', ...h})).toBeInTheDocument();
+  });
+
+  it('hosts a Menu + DropdownMenuSubMenu flyout without a wrapping dialog', async () => {
+    const user = userEvent.setup();
+    const onChange = vi.fn();
+    render(
+      <ComplexSelector
+        label="Model"
+        value="GPT-4"
+        onChange={onChange}
+        triggerLabel="GPT-4"
+        popupRole="none">
+        {(_value, commit, close, state) => (
+          <Menu label="Model" onClose={close} isOpen={state.isOpen}>
+            <DropdownMenuItem
+              label="GPT-4"
+              onClick={() => {
+                commit('GPT-4');
+              }}
+            />
+            <DropdownMenuSubMenu label="More models">
+              <DropdownMenuItem
+                label="Fable 5"
+                onClick={() => {
+                  commit('Fable 5');
+                }}
+              />
+            </DropdownMenuSubMenu>
+          </Menu>
+        )}
+      </ComplexSelector>,
+    );
+
+    await user.click(screen.getByRole('button', {name: 'Model'}));
+    expect(screen.queryByRole('dialog', h)).not.toBeInTheDocument();
+    expect(screen.getByRole('menu', {name: 'Model', ...h})).toBeInTheDocument();
+
+    await user.click(screen.getByRole('menuitem', {name: /More models/, ...h}));
+    await waitFor(() => {
+      expect(
+        screen.getByRole('menuitem', {name: /More models/, ...h}),
+      ).toHaveAttribute('aria-expanded', 'true');
+    });
+
+    const flyoutItem = screen.getByRole('menuitem', {
+      name: 'Fable 5',
+      ...h,
+    });
+    expect(flyoutItem.closest('[popover]')).toHaveAttribute(
+      'popover',
+      'manual',
+    );
   });
 });
