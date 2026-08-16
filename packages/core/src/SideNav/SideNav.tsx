@@ -395,6 +395,13 @@ export function SideNav({
   });
 
   const toggle = useCallback(() => {
+    // With collapse disabled the resize hook ignores collapse(), so going
+    // further would leave collapseStateRef reporting a state the nav never
+    // entered — and nothing re-renders to correct it.
+    if (isResizable && !isCollapsible) {
+      return;
+    }
+
     const next = !collapsed;
 
     // Deprecated `handleRef` path only: an out-of-tree button reads this
@@ -404,15 +411,24 @@ export function SideNav({
       isCollapsed: next,
     };
 
-    setCollapsedState(next);
     if (isResizable) {
-      if (next) {
+      // The hook's onCollapseChange already drives setCollapsedState, so
+      // notifying here as well would fire onCollapsedChange twice per click.
+      // When the hook already matches the requested state — a controlled
+      // parent that refused a drag-collapse or an earlier toggle, say —
+      // collapse()/expand() notify nothing, so notify directly to keep the
+      // click meaningful.
+      if (next === resizableHook.isCollapsed) {
+        setCollapsedState(next);
+      } else if (next) {
         resizableHook.collapse();
       } else {
         resizableHook.expand();
       }
+    } else {
+      setCollapsedState(next);
     }
-  }, [collapsed, setCollapsedState, isResizable, resizableHook]);
+  }, [collapsed, setCollapsedState, isResizable, isCollapsible, resizableHook]);
 
   const showResizeHandle = isResizable && !collapsed;
 

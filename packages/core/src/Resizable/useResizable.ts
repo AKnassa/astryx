@@ -323,9 +323,14 @@ function useSingleResizable(config: UseResizableSingleConfig): ResizableRegion {
       const clamped = clampSize(newSize, minSizePx, maxSizePx, snaps);
       setSize(clamped);
       setIsCollapsed(false);
+      // Resizing out of the collapsed state is an implicit expand — notify
+      // like the drag path does when it crosses back over the threshold.
+      if (isCollapsed) {
+        onCollapseChange?.(false);
+      }
       onSizeChange?.(clamped);
     },
-    [minSizePx, maxSizePx, snaps, onSizeChange],
+    [minSizePx, maxSizePx, snaps, isCollapsed, onCollapseChange, onSizeChange],
   );
 
   const onResizeStart = useCallback(() => {

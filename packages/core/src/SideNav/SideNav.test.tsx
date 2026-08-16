@@ -2496,6 +2496,20 @@ describe('SideNav resizable persistence edge cases (#4790)', () => {
     );
   });
 
+  it('fires onCollapsedChange exactly once per toggle click', async () => {
+    const onCollapsedChange = vi.fn();
+    const user = userEvent.setup();
+    render(<PersistedSideNav collapsible={{onCollapsedChange}} />);
+
+    await user.click(screen.getByRole('button', {name: 'Collapse sidebar'}));
+    expect(onCollapsedChange).toHaveBeenCalledTimes(1);
+    expect(onCollapsedChange).toHaveBeenLastCalledWith(true);
+
+    await user.click(screen.getByRole('button', {name: 'Expand sidebar'}));
+    expect(onCollapsedChange).toHaveBeenCalledTimes(2);
+    expect(onCollapsedChange).toHaveBeenLastCalledWith(false);
+  });
+
   it('never writes to localStorage without autoSaveId', async () => {
     const user = userEvent.setup();
     render(
@@ -2573,5 +2587,100 @@ describe('SideNav resizable persistence edge cases (#4790)', () => {
     expect(
       screen.queryByRole('button', {name: 'Expand sidebar'}),
     ).not.toBeInTheDocument();
+  });
+
+  it('keeps the imperative collapse state honest when collapse is disabled', () => {
+    const seen: (boolean | undefined)[] = [];
+
+    function Probe() {
+      const handleRef = useRef<SideNavImperativeCollapseHandle>(null);
+      return (
+        <>
+          <button
+            type="button"
+            data-testid="external-toggle"
+            onClick={() => {
+              handleRef.current?.getCollapseState()?.toggle();
+              seen.push(handleRef.current?.getCollapseState()?.isCollapsed);
+            }}>
+            toggle
+          </button>
+          <SideNav
+            handleRef={handleRef}
+            resizable={{defaultWidth: 300, autoSaveId: NAV_SAVE_ID}}>
+            Content
+          </SideNav>
+        </>
+      );
+    }
+
+    render(<Probe />);
+    fireEvent.click(screen.getByTestId('external-toggle'));
+
+    // The nav cannot collapse, so the reported state must not claim it did.
+    expect(seen).toEqual([false]);
+    expect(screen.getByRole('navigation').style.width).toBe('300px');
+  });
+
+  it('still collapses on click after a controlled parent refused a drag-collapse', async () => {
+    const user = userEvent.setup();
+    const onCollapsedChange = vi.fn();
+    render(
+      <SideNav
+        collapsible={{isCollapsed: false, onCollapsedChange}}
+        resizable={{
+          defaultWidth: 300,
+          minWidth: 150,
+          maxWidth: 600,
+          autoSaveId: NAV_SAVE_ID,
+        }}>
+        Content
+      </SideNav>,
+    );
+
+    // Drag below the collapse threshold. The parent ignores the change, so
+    // the hook is collapsed internally while SideNav still renders expanded.
+    const hitArea = screen.getByTestId('astryx-sidenav-resize-handle')
+      .firstElementChild as HTMLElement;
+    act(() => {
+      fireEvent.pointerDown(hitArea, {clientX: 300});
+      fireEvent.pointerMove(document, {clientX: 20});
+      fireEvent.pointerUp(document, {clientX: 20});
+    });
+    expect(onCollapsedChange).toHaveBeenLastCalledWith(true);
+    onCollapsedChange.mockClear();
+
+    // The collapse button must still report a collapse request.
+    await user.click(screen.getByRole('button', {name: 'Collapse sidebar'}));
+    expect(onCollapsedChange).toHaveBeenCalledTimes(1);
+    expect(onCollapsedChange).toHaveBeenCalledWith(true);
+  });
+
+  it('keeps expand clicks meaningful after a controlled parent refuses an expand', async () => {
+    const user = userEvent.setup();
+    const onCollapsedChange = vi.fn();
+    render(
+      <SideNav
+        collapsible={{isCollapsed: true, onCollapsedChange}}
+        resizable={{
+          defaultWidth: 300,
+          minWidth: 150,
+          maxWidth: 600,
+          autoSaveId: NAV_SAVE_ID,
+        }}>
+        Content
+      </SideNav>,
+    );
+
+    // The parent never accepts the change, so after the first click the
+    // hook is expanded internally while SideNav still renders collapsed.
+    await user.click(screen.getByRole('button', {name: 'Expand sidebar'}));
+    expect(onCollapsedChange).toHaveBeenCalledTimes(1);
+    expect(onCollapsedChange).toHaveBeenLastCalledWith(false);
+
+    // The second click must still report an expand request.
+    await user.click(screen.getByRole('button', {name: 'Expand sidebar'}));
+    expect(onCollapsedChange).toHaveBeenCalledTimes(2);
+    expect(onCollapsedChange).toHaveBeenLastCalledWith(false);
   });
 });

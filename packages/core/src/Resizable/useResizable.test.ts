@@ -199,6 +199,29 @@ describe('useResizable persistence', () => {
     });
   });
 
+  it('resize() out of the collapsed state notifies onCollapseChange(false)', () => {
+    const onCollapseChange = vi.fn();
+    const {result} = renderHook(() =>
+      useResizable({...BASE_CONFIG, collapsible: true, onCollapseChange}),
+    );
+    act(() => result.current.collapse());
+    onCollapseChange.mockClear();
+
+    act(() => result.current.resize(320));
+    expect(onCollapseChange).toHaveBeenCalledTimes(1);
+    expect(onCollapseChange).toHaveBeenCalledWith(false);
+  });
+
+  it('does not notify onCollapseChange when resizing an already expanded region', () => {
+    const onCollapseChange = vi.fn();
+    const {result} = renderHook(() =>
+      useResizable({...BASE_CONFIG, collapsible: true, onCollapseChange}),
+    );
+    act(() => result.current.resize(300));
+    act(() => result.current.resize(320));
+    expect(onCollapseChange).not.toHaveBeenCalled();
+  });
+
   it('treats an explicit regions: undefined as a single-region config', () => {
     const {result} = renderHook(() =>
       useResizable({
