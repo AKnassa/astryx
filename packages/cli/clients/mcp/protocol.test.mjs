@@ -36,6 +36,12 @@ describe('decodeLine', () => {
   it('ignores a blank line', () => {
     expect(decodeLine('   ')).toEqual({ok: false, code: null});
   });
+
+  it('rejects a top-level primitive as an invalid request', () => {
+    for (const line of ['42', '"ping"', 'null', 'true']) {
+      expect(decodeLine(line)).toEqual({ok: false, code: INVALID_REQUEST});
+    }
+  });
 });
 
 describe('encodeMessage', () => {

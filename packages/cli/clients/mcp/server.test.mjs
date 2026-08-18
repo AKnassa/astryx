@@ -173,6 +173,16 @@ describe('tools/call', () => {
   });
 });
 
+describe('malformed requests', () => {
+  it('answers invalid-request when the method is missing or not a string', async () => {
+    const missing = await handler().handle({jsonrpc: '2.0', id: 7});
+    expect(missing?.error?.code).toBe(-32600);
+    const wrong = await handler().handle({jsonrpc: '2.0', id: 8, method: 5});
+    expect(wrong?.error?.code).toBe(-32600);
+    expect(wrong?.id).toBe(8);
+  });
+});
+
 describe('unknown methods', () => {
   it('answers method-not-found rather than staying silent', async () => {
     const response = await handler().handle({

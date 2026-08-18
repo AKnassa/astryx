@@ -69,6 +69,15 @@ describe('loadProjectContext', () => {
       loadProjectContext(path.join(bare, 'does', 'not', 'exist')),
     ).resolves.toBeDefined();
   });
+
+  it('reports null rather than a lie when the installed core package.json is malformed', async () => {
+    const broken = path.join(path.dirname(withCore), 'broken');
+    const coreDir = path.join(broken, 'node_modules', '@astryxdesign', 'core');
+    fs.mkdirSync(coreDir, {recursive: true});
+    fs.writeFileSync(path.join(coreDir, 'package.json'), '{not json');
+    const context = await loadProjectContext(broken);
+    expect(context.coreVersion).toBeNull();
+  });
 });
 
 describe('renderInstructions', () => {

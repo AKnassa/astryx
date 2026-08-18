@@ -86,6 +86,33 @@ describe('pump', () => {
     expect(out[1].id).toBe(3);
   });
 
+  it('answers a top-level primitive line as an invalid request', async () => {
+    const out = await run(['null\n'], echo);
+    expect(out).toEqual([
+      {jsonrpc: '2.0', error: {code: -32600, message: 'Invalid request'}},
+    ]);
+  });
+
+  it('ignores blank lines between messages', async () => {
+    const out = await run(
+      ['\n  \n{"jsonrpc":"2.0","id":12,"method":"ping"}\n'],
+      echo,
+    );
+    expect(out).toEqual([{jsonrpc: '2.0', id: 12, result: {}}]);
+  });
+
+  it('accepts CRLF line endings', async () => {
+    const out = await run(['{"jsonrpc":"2.0","id":13,"method":"ping"}\r\n'], echo);
+    expect(out).toEqual([{jsonrpc: '2.0', id: 13, result: {}}]);
+  });
+
+  // The comment in pump() promises this; without a test the branch is free to
+  // rot: a client may end its stream without a final newline.
+  it('answers a final message that arrives with no trailing newline', async () => {
+    const out = await run(['{"jsonrpc":"2.0","id":11,"method":"ping"}'], echo);
+    expect(out).toEqual([{jsonrpc: '2.0', id: 11, result: {}}]);
+  });
+
   it('turns a handler crash into an internal error instead of dying', async () => {
     const out = await run(
       ['{"jsonrpc":"2.0","id":4,"method":"ping"}\n'],
@@ -117,6 +144,27 @@ describe('pump', () => {
       echo,
     );
     expect(out).toEqual([]);
+  });
+
+  // decodeLine screens a single message, but batch members arrive raw. A
+  // member like null or 1 must answer as an invalid request inside the batch
+  // reply — not crash the session, and not vanish.
+  it('answers non-object batch members with invalid-request errors and keeps serving', async () => {
+    const out = await run(
+      [
+        '[null,1,{"jsonrpc":"2.0","id":9,"method":"ping"}]\n',
+        '{"jsonrpc":"2.0","id":10,"method":"ping"}\n',
+      ],
+      echo,
+    );
+    expect(out).toHaveLength(2);
+    const batch = out[0];
+    expect(batch).toHaveLength(3);
+    expect(batch[0].error.code).toBe(-32600);
+    expect('id' in batch[0]).toBe(false);
+    expect(batch[1].error.code).toBe(-32600);
+    expect(batch[2]).toEqual({jsonrpc: '2.0', id: 9, result: {}});
+    expect(out[1].id).toBe(10);
   });
 
   // Responses must leave in request order. Without awaiting each handler the

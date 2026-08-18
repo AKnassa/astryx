@@ -80,7 +80,12 @@ export function createTools({cwd}) {
           throw new Error('search requires a non-empty "query" string.');
         }
         const limit = typeof args.limit === 'number' ? args.limit : undefined;
-        const {data} = await search(query, {cwd, ...(limit ? {limit} : {})});
+        // Forward any provided number — 0 and NaN included — so the api's own
+        // "positive integer" validation answers rather than a silent default.
+        const {data} = await search(query, {
+          cwd,
+          ...(limit !== undefined ? {limit} : {}),
+        });
         return data;
       },
     },
@@ -142,7 +147,10 @@ export function createTools({cwd}) {
           );
         }
 
-        const response = await fetch(name, section, cwd);
+        // Fetch by the hit's canonical name, not the caller's: the match above
+        // is case-insensitive, but template() resolves by exact dirName, so
+        // the caller's casing could 404 on an artifact search just confirmed.
+        const response = await fetch(target.name, section, cwd);
         return {
           kind: target.domain,
           name: target.name,

@@ -69,14 +69,21 @@ export async function pump({input, output, handle}) {
   /**
    * Run one message through the handler, turning a fault into an error response
    * rather than letting it end the session.
-   * @param {Record<string, unknown>} message
+   * @param {unknown} message
    * @returns {Promise<object|null>}
    */
   async function answer(message) {
+    // decodeLine screens a single message, but batch members arrive here raw:
+    // a null or primitive member must answer as an invalid request, not reach
+    // the handler (where reading .id off null would end the session).
+    if (message === null || typeof message !== 'object' || Array.isArray(message)) {
+      return errorResponse(null, INVALID_REQUEST, 'Invalid request');
+    }
+    const request = /** @type {Record<string, unknown>} */ (message);
     try {
-      return await handle(message);
+      return await handle(request);
     } catch (err) {
-      const id = /** @type {string|number|null} */ (message.id ?? null);
+      const id = /** @type {string|number|null} */ (request.id ?? null);
       const detail = err instanceof Error ? err.message : String(err);
       return errorResponse(id, INTERNAL_ERROR, detail);
     }

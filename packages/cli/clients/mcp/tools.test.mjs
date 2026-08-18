@@ -70,9 +70,22 @@ describe('search', () => {
   it('rejects a missing query rather than searching for undefined', async () => {
     await expect(tool('search').run({})).rejects.toThrow(/query/i);
   });
+
+  // The api validates limit loudly ("must be a positive integer"). A
+  // truthiness check here used to swallow limit: 0 and quietly serve the
+  // default 20 instead of letting that contract answer.
+  it('passes limit 0 through to the api validation instead of ignoring it', async () => {
+    await expect(
+      tool('search').run({query: 'button', limit: 0}),
+    ).rejects.toThrow(/positive integer/i);
+  });
 });
 
 describe('get', () => {
+  it('rejects a missing name rather than resolving undefined', async () => {
+    await expect(tool('get').run({})).rejects.toThrow(/name/i);
+  });
+
   it('resolves a component to its full detail', async () => {
     const result = await tool('get').run({name: 'Button'});
     expect(result.kind).toBe('component');
@@ -87,6 +100,22 @@ describe('get', () => {
   it('resolves a doc topic', async () => {
     const result = await tool('get').run({name: 'spacing'});
     expect(result.kind).toBe('doc');
+  });
+
+  it('resolves a template by its id', async () => {
+    const result = await tool('get').run({name: 'ai-chat'});
+    expect(result.kind).toBe('template');
+    expect(result.name).toBe('ai-chat');
+  });
+
+  // Search matches names case-insensitively, but template() resolves by exact
+  // dirName — so fetching with the caller's casing answered "Unknown template"
+  // for a template the server itself had just found. Fetch by the hit's own
+  // canonical name instead.
+  it('resolves a template whatever casing the model used', async () => {
+    const result = await tool('get').run({name: 'AI-CHAT'});
+    expect(result.kind).toBe('template');
+    expect(result.name).toBe('ai-chat');
   });
 
   // Regression: component() fuzzy-matches, so resolving by "try each api in
@@ -111,5 +140,25 @@ describe('get', () => {
     await expect(
       tool('get').run({name: 'DefinitelyNotAThing'}),
     ).rejects.toThrow(/DefinitelyNotAThing/);
+  });
+
+  it('names the closest matches when the name is near a real one', async () => {
+    await expect(tool('get').run({name: 'Buttonn'})).rejects.toThrow(
+      /Closest matches: .*Button/,
+    );
+  });
+
+  // Same dynamic-fixture pattern as api/docs tests: read a real section title
+  // off the detail, then ask for just that section.
+  it('returns just the asked section of a doc topic', async () => {
+    const detail = await tool('get').run({name: 'spacing'});
+    const sections = detail.data.sections;
+    expect(Array.isArray(sections) && sections.length > 0).toBe(true);
+    const result = await tool('get').run({
+      name: 'spacing',
+      section: sections[0].title,
+    });
+    expect(result.kind).toBe('doc');
+    expect(result.type).toBe('docs.detail.section');
   });
 });
