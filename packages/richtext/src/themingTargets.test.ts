@@ -26,6 +26,14 @@ interface ThemePropsSite {
   keys: string[];
 }
 
+/**
+ * Matches themeProps('<name>') and themeProps('<name>', {...}) in both
+ * prettier call shapes (hug, and expanded with a trailing comma). matchAll
+ * never advances a shared /g literal's lastIndex, so one instance is safe.
+ */
+const THEMEPROPS_RE =
+  /themeProps\(\s*'([^']+)'\s*(?:,\s*\{([\s\S]*?)\}\s*,?\s*)?\)/g;
+
 /** Split an object-literal body on top-level commas only. */
 function splitTopLevel(body: string): string[] {
   const parts: string[] = [];
@@ -48,6 +56,24 @@ function splitTopLevel(body: string): string[] {
   return parts.map(p => p.trim()).filter(Boolean);
 }
 
+/**
+ * Extract every themeProps call site from one source text. The self-tests
+ * below exercise this exact function, so a drifting regex fails them rather
+ * than silently extracting nothing.
+ */
+function extractSites(src: string, file: string): ThemePropsSite[] {
+  const sites: ThemePropsSite[] = [];
+  for (const match of src.matchAll(THEMEPROPS_RE)) {
+    const [, name, body] = match;
+    const keys =
+      body == null
+        ? []
+        : splitTopLevel(body).map(part => part.split(':')[0].trim());
+    sites.push({file, name, keys});
+  }
+  return sites;
+}
+
 /** Extract every themeProps('<name>', {...}) call site in the package. */
 function themePropsSites(): ThemePropsSite[] {
   const files = readdirSync(SRC_DIR).filter(
@@ -56,23 +82,9 @@ function themePropsSites(): ThemePropsSite[] {
       !f.includes('.test.') &&
       !f.endsWith('.d.ts'),
   );
-  const sites: ThemePropsSite[] = [];
-  for (const file of files) {
-    const src = readFileSync(join(SRC_DIR, file), 'utf8');
-    const re = /themeProps\(\s*'([^']+)'\s*(?:,\s*\{([\s\S]*?)\}\s*,?\s*)?\)/g;
-    for (const match of src.matchAll(re)) {
-      const [, name, body] = match;
-      const keys =
-        body == null
-          ? []
-          : splitTopLevel(body).map(part => {
-              const key = part.split(':')[0].trim();
-              return key;
-            });
-      sites.push({file, name, keys});
-    }
-  }
-  return sites;
+  return files.flatMap(file =>
+    extractSites(readFileSync(join(SRC_DIR, file), 'utf8'), file),
+  );
 }
 
 interface DocTarget {
@@ -99,37 +111,23 @@ describe('themeProps extraction', () => {
       },
     )`;
     for (const src of [hug, expanded]) {
-      const re =
-        /themeProps\(\s*'([^']+)'\s*(?:,\s*\{([\s\S]*?)\}\s*,?\s*)?\)/g;
-      const match = [...src.matchAll(re)];
-      expect(match).toHaveLength(1);
-      expect(match[0][1]).toBe('rich-text-editor');
-      expect(
-        splitTopLevel(match[0][2]).map(part => part.split(':')[0].trim()),
-      ).toEqual(['size', 'status']);
+      expect(extractSites(src, '<inline>')).toEqual([
+        {file: '<inline>', name: 'rich-text-editor', keys: ['size', 'status']},
+      ]);
     }
   });
 
   it('extracts an empty key list when the call site passes no props object', () => {
-    const src = `themeProps('rich-text-toolbar')`;
-    const re = /themeProps\(\s*'([^']+)'\s*(?:,\s*\{([\s\S]*?)\}\s*,?\s*)?\)/g;
-    const matches = [...src.matchAll(re)];
-    expect(matches).toHaveLength(1);
-    expect(matches[0][1]).toBe('rich-text-toolbar');
-    const body = matches[0][2];
-    expect(body).toBeUndefined();
-    expect(body == null ? [] : splitTopLevel(body)).toEqual([]);
+    expect(extractSites(`themeProps('rich-text-toolbar')`, '<inline>')).toEqual(
+      [{file: '<inline>', name: 'rich-text-toolbar', keys: []}],
+    );
   });
 
   it('splits only top-level commas when a prop value nests an object literal', () => {
     const src = `themeProps('rich-text-editor', {size, status: cond ? {a: 1, b: 2} : null})`;
-    const re = /themeProps\(\s*'([^']+)'\s*(?:,\s*\{([\s\S]*?)\}\s*,?\s*)?\)/g;
-    const matches = [...src.matchAll(re)];
-    expect(matches).toHaveLength(1);
-    expect(matches[0][1]).toBe('rich-text-editor');
-    expect(
-      splitTopLevel(matches[0][2]).map(part => part.split(':')[0].trim()),
-    ).toEqual(['size', 'status']);
+    expect(extractSites(src, '<inline>')).toEqual([
+      {file: '<inline>', name: 'rich-text-editor', keys: ['size', 'status']},
+    ]);
   });
 });
 

@@ -7,7 +7,9 @@
  * @input Uses React, @lexical/react (composer context), @lexical/rich-text,
  *   @lexical/selection, @lexical/list, @lexical/utils, and the lexical core
  *   command constants, plus Astryx Toolbar / IconButton / Selector /
- *   ToggleButton / Divider / Dialog / TextInput / Button / Layout primitives.
+ *   ToggleButton / Divider / Dialog / TextInput / Button / Layout primitives,
+ *   BaseProps, useTranslator (i18n), useThemeName (theme-scoped icons),
+ *   isRenderable/rtlStyles (utils), and typeScale/fontWeight tokens.
  * @output Exports RichTextEditorToolbar (a compact formatting toolbar with a
  *   horizontally scrollable action row) and RichTextEditorToolbarProps.
  * @position Experimental (richtext). Drop into RichTextEditor's `toolbar` slot to
@@ -17,7 +19,8 @@
  * SYNC: When modified, update:
  * - /packages/richtext/src/index.ts (exports)
  * - /packages/richtext/src/RichTextEditor.doc.mjs (usage notes)
- * - /packages/richtext/src/RichTextEditor.test.tsx (tests)
+ * - /packages/richtext/src/RichTextEditorToolbar.test.tsx (toolbar tests)
+ * - /packages/richtext/src/RichTextEditor.test.tsx (integration tests)
  * - /apps/storybook/stories/RichTextEditor.stories.tsx (WithToolbar story)
  *
  * NOTE: Experimental `@astryxdesign/richtext` component (canary). `lexical` and

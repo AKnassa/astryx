@@ -5,8 +5,12 @@
  * @input Uses vitest, @testing-library/react, RichTextEditor + RichTextView
  * @output Unit tests for the opt-in Lexical editor components, including
  *   accessible label wiring, shared input visuals/status variants,
- *   placeholder semantics, canonical link-dialog layout, and top-toolbar
- *   ordering and horizontal scrolling
+ *   placeholder semantics, canonical link-dialog layout, top-toolbar
+ *   ordering and horizontal scrolling, i18n catalog routing, the read-only
+ *   vs disabled ARIA split and editable-state sync across prop toggles,
+ *   character-counter boundaries (ICU plurals), tabEscapeHint wiring,
+ *   coarse-pointer touch-target floors, theme icon overrides, and RTL
+ *   glyph mirroring
  * @position Testing; validates RichTextEditor.tsx and RichTextView.tsx
  *
  * SYNC: When the editor components change, update these tests to match.
@@ -93,6 +97,27 @@ afterAll(() => {
     delete (HTMLDialogElement.prototype as {close?: unknown}).close;
   }
 });
+
+// StyleX class names are content-addressed: identical declarations compile to
+// identical atomic classes, so a style compiled here proves membership on an
+// element. Drops the human-readable debug name, which is not shared.
+function atomicClasses(style: stylex.StyleXStyles): string[] {
+  return (stylex.props(style).className ?? '')
+    .split(/\s+/)
+    .filter(c => /^x[a-z0-9]+$/.test(c));
+}
+
+// jsdom's Range does not implement getBoundingClientRect, which Lexical
+// calls (via scroll-into-view) whenever it reconciles a selection while the
+// editor is focused. Guarded stub shared by every describe that focuses the
+// editor (Tab-escape, imperative ref toggles).
+function stubRangeRects() {
+  beforeAll(() => {
+    if (typeof Range.prototype.getBoundingClientRect !== 'function') {
+      Range.prototype.getBoundingClientRect = () => new DOMRect();
+    }
+  });
+}
 
 // Small plugin that captures the editor instance so tests can drive real
 // Lexical updates (jsdom does not implement contenteditable editing).
@@ -816,15 +841,7 @@ describe('RichTextEditor', () => {
 describe('RichTextEditor Tab keyboard trap escape (WCAG 2.1.2)', () => {
   const DEFAULT_HINT = 'Press Escape then Tab to move focus out of the editor.';
 
-  beforeAll(() => {
-    // jsdom's Range does not implement getBoundingClientRect, which Lexical
-    // calls (via scroll-into-view) whenever it reconciles a collapsed
-    // selection while the editor is focused. Stub it so the focused-editor
-    // keyboard tests below can run without uncaught exceptions.
-    if (typeof Range.prototype.getBoundingClientRect !== 'function') {
-      Range.prototype.getBoundingClientRect = () => new DOMRect();
-    }
-  });
+  stubRangeRects();
 
   /**
    * Renders the editor followed by a button, focuses the contenteditable and
@@ -1826,11 +1843,7 @@ describe('toolbar touch targets', () => {
     },
   });
 
-  // Only atomic classes are content-addressed across files; drop the
-  // human-readable debug name.
-  const floorClasses = (stylex.props(expectedFloor.control).className ?? '')
-    .split(/\s+/)
-    .filter(c => /^x[a-z0-9]+$/.test(c));
+  const floorClasses = atomicClasses(expectedFloor.control);
 
   it('compiles a non-empty coarse-pointer floor fixture', () => {
     expect(floorClasses.length).toBeGreaterThan(0);
@@ -1889,12 +1902,9 @@ describe('toolbar icons', () => {
     render(
       <RichTextEditor label="Notes" toolbar={<RichTextEditorToolbar />} />,
     );
-    // rtlStyles.mirror is the shared cross-package mirror style; its atomic
-    // classes are content-addressed, so carrying them proves the glyph flips
-    // under [dir="rtl"].
-    const mirrorClasses = (stylex.props(rtlStyles.mirror).className ?? '')
-      .split(/\s+/)
-      .filter(c => /^x[a-z0-9]+$/.test(c));
+    // rtlStyles.mirror is the shared cross-package mirror style; carrying its
+    // atomic classes proves the glyph flips under [dir="rtl"].
+    const mirrorClasses = atomicClasses(rtlStyles.mirror);
     expect(mirrorClasses.length).toBeGreaterThan(0);
     for (const name of ['Undo', 'Redo']) {
       const button = screen.getByRole('button', {name});
@@ -2094,14 +2104,7 @@ describe('tabEscapeHint aria wiring', () => {
 });
 
 describe('imperative ref across editable prop toggles', () => {
-  beforeAll(() => {
-    // jsdom's Range does not implement getBoundingClientRect, which Lexical
-    // calls (via scroll-into-view) when it reconciles a selection while the
-    // editor is focused. Stub it so ref.focus() can run to completion.
-    if (typeof Range.prototype.getBoundingClientRect !== 'function') {
-      Range.prototype.getBoundingClientRect = () => new DOMRect();
-    }
-  });
+  stubRangeRects();
 
   it('unlocks focus() once isDisabled is removed', async () => {
     const ref = createRef<RichTextEditorRef>();

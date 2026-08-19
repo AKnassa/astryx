@@ -3,7 +3,9 @@
 /**
  * @file globalIconRegistry.tsx
  * @input None (pure module-level state)
- * @output Exports registerIcons, getIconRegistry, getIcon, resetIcons, IconName, IconRegistry
+ * @output Exports registerIcons, getIconRegistry, getIcon, getExtendedIcon,
+ *   resetIcons, IconName, ExtendedIconName, IconRegistry, ExtendedIconRegistry,
+ *   IconRegistrySource
  * @position Global and theme-scoped icon registry; works in server and client environments
  *
  * This module has NO 'use client' directive — it's importable from RSC.

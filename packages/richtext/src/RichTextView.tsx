@@ -4,7 +4,8 @@
 
 /**
  * @file RichTextView.tsx
- * @input Uses React, Lexical (lexical + @lexical/react), design tokens
+ * @input Uses React, Lexical (lexical + @lexical/react), mergeProps and
+ *   warnOnce from core utils, design tokens
  * @output Exports RichTextView component and RichTextViewProps
  * @position Read-only renderer for serialized Lexical editor state; experimental
  *   (richtext), exported from @astryxdesign/richtext

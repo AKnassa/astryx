@@ -5,7 +5,8 @@
 /**
  * @file RichTextEditor.tsx
  * @input Uses React, useId, Lexical (lexical + @lexical/react), Field,
- *   VisuallyHidden, useInputStatusIcon, mergeProps, design tokens
+ *   VisuallyHidden, useInputStatusIcon, mergeProps/themeProps, useTranslator
+ *   (i18n), design tokens
  * @output Exports an accessibly labelled RichTextEditor component with a flush
  *   top toolbar slot and configurable editable-surface minimum height, RichTextEditorProps,
  *   RichTextEditorStatus, RichTextEditorStatusType, RichTextEditorSize
