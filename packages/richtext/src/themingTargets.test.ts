@@ -109,6 +109,28 @@ describe('themeProps extraction', () => {
       ).toEqual(['size', 'status']);
     }
   });
+
+  it('extracts an empty key list when the call site passes no props object', () => {
+    const src = `themeProps('rich-text-toolbar')`;
+    const re = /themeProps\(\s*'([^']+)'\s*(?:,\s*\{([\s\S]*?)\}\s*,?\s*)?\)/g;
+    const matches = [...src.matchAll(re)];
+    expect(matches).toHaveLength(1);
+    expect(matches[0][1]).toBe('rich-text-toolbar');
+    const body = matches[0][2];
+    expect(body).toBeUndefined();
+    expect(body == null ? [] : splitTopLevel(body)).toEqual([]);
+  });
+
+  it('splits only top-level commas when a prop value nests an object literal', () => {
+    const src = `themeProps('rich-text-editor', {size, status: cond ? {a: 1, b: 2} : null})`;
+    const re = /themeProps\(\s*'([^']+)'\s*(?:,\s*\{([\s\S]*?)\}\s*,?\s*)?\)/g;
+    const matches = [...src.matchAll(re)];
+    expect(matches).toHaveLength(1);
+    expect(matches[0][1]).toBe('rich-text-editor');
+    expect(
+      splitTopLevel(matches[0][2]).map(part => part.split(':')[0].trim()),
+    ).toEqual(['size', 'status']);
+  });
 });
 
 describe('richtext theming targets', () => {

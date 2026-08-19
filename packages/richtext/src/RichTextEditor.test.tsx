@@ -1953,3 +1953,189 @@ describe('editable state follows prop changes', () => {
     expect(textbox).toHaveAttribute('aria-readonly', 'true');
   });
 });
+
+describe('isReadOnly + isDisabled combined', () => {
+  it('lets disabled win everywhere when both flags are set', () => {
+    const {container} = render(
+      <RichTextEditor label="Notes" isReadOnly isDisabled />,
+    );
+    const textbox = screen.getByRole('textbox');
+
+    // Non-editable either way.
+    expect(textbox).toHaveAttribute('contenteditable', 'false');
+    // Disabled semantics take precedence: announced disabled, never
+    // read-only, and out of the tab order.
+    expect(textbox).toHaveAttribute('aria-disabled', 'true');
+    expect(textbox).not.toHaveAttribute('aria-readonly');
+    expect(textbox).not.toHaveAttribute('tabindex', '0');
+    // The wrapper carries the dimmed disabled treatment.
+    const wrapper = container.querySelector('.astryx-rich-text-editor');
+    expect(wrapper).not.toBeNull();
+    expect(getComputedStyle(wrapper as Element).opacity).toBe('0.5');
+  });
+
+  it('swaps disabled semantics for read-only semantics on rerender', () => {
+    const {container, rerender} = render(
+      <RichTextEditor label="Notes" isDisabled />,
+    );
+    expect(screen.getByRole('textbox')).toHaveAttribute(
+      'aria-disabled',
+      'true',
+    );
+
+    rerender(<RichTextEditor label="Notes" isReadOnly />);
+    const textbox = screen.getByRole('textbox');
+
+    // Still non-editable, but the announcement and reachability flip from
+    // disabled to read-only.
+    expect(textbox).toHaveAttribute('contenteditable', 'false');
+    expect(textbox).not.toHaveAttribute('aria-disabled');
+    expect(textbox).toHaveAttribute('aria-readonly', 'true');
+    expect(textbox).toHaveAttribute('tabindex', '0');
+    // The dimmed disabled treatment is gone. (jsdom computes unset opacity
+    // as '' rather than the initial '1', so assert the 0.5 rule no longer
+    // applies — matching the read-only dimming test above.)
+    const wrapper = container.querySelector('.astryx-rich-text-editor');
+    expect(wrapper).not.toBeNull();
+    expect(getComputedStyle(wrapper as Element).opacity).not.toBe('0.5');
+  });
+});
+
+describe('character counter boundaries', () => {
+  it('announces "0 characters remaining" exactly at maxLength', async () => {
+    // Exactly 10 characters with a limit of 10: at the limit but not over it,
+    // so the remaining branch fires with count 0 (plural "characters").
+    render(
+      <RichTextEditor
+        label="Notes"
+        defaultValue={makeParagraphState('0123456789')}
+        maxLength={10}
+      />,
+    );
+    await waitFor(() => expect(screen.getByText('10/10')).toBeInTheDocument());
+    expect(screen.getByText('0 characters remaining')).toBeInTheDocument();
+  });
+
+  it('announces the ICU singular "1 character over limit" one past the limit', async () => {
+    // 11 characters with a limit of 10 — exactly one over. The ICU plural
+    // must select the singular "character" (no trailing s).
+    render(
+      <RichTextEditor
+        label="Notes"
+        defaultValue={makeParagraphState('0123456789X')}
+        maxLength={10}
+      />,
+    );
+    await waitFor(() => expect(screen.getByText('11/10')).toBeInTheDocument());
+    expect(screen.getByText('1 character over limit')).toBeInTheDocument();
+    expect(
+      screen.queryByText('1 characters over limit'),
+    ).not.toBeInTheDocument();
+  });
+
+  it('keeps the polite live region empty below the warning threshold', async () => {
+    // 7 characters with a limit of 10 sits below the 0.8 warning threshold
+    // (7 < 8): the visible counter renders but the live region announces
+    // nothing, so screen-reader users are not chattered at prematurely.
+    render(
+      <RichTextEditor
+        label="Notes"
+        defaultValue={makeParagraphState('seven77')}
+        maxLength={10}
+      />,
+    );
+    const counter = await screen.findByText('7/10');
+    const liveRegion = counter.querySelector('[aria-live="polite"]');
+    expect(liveRegion).not.toBeNull();
+    expect(liveRegion).toHaveTextContent('');
+  });
+});
+
+describe('tabEscapeHint aria wiring', () => {
+  const DEFAULT_HINT = 'Press Escape then Tab to move focus out of the editor.';
+
+  it('keeps other aria-describedby references when the hint is suppressed', () => {
+    // With tabEscapeHint="" the hint is omitted, but aria-describedby must
+    // survive for the remaining sources (here: the placeholder), rather than
+    // disappearing wholesale or referencing a hint id that renders nothing.
+    render(
+      <RichTextEditor
+        label="Notes"
+        placeholder="Write something…"
+        tabEscapeHint=""
+      />,
+    );
+    expect(screen.queryByText(DEFAULT_HINT)).not.toBeInTheDocument();
+    const textbox = screen.getByRole('textbox');
+    const describedBy = textbox.getAttribute('aria-describedby');
+    expect(describedBy).toBeTruthy();
+    const ids = describedBy!.split(/\s+/);
+    expect(ids).toContain(screen.getByText('Write something…').id);
+    // Every referenced id resolves to a real element, and none of them is a
+    // tab-escape hint.
+    for (const id of ids) {
+      const referenced = document.getElementById(id);
+      expect(referenced).not.toBeNull();
+      expect(referenced).not.toHaveTextContent(DEFAULT_HINT);
+    }
+  });
+
+  it('wires a custom hint into aria-describedby in place of the default', () => {
+    render(<RichTextEditor label="Notes" tabEscapeHint="Custom escape hint" />);
+    const hint = screen.getByText('Custom escape hint');
+    expect(screen.queryByText(DEFAULT_HINT)).not.toBeInTheDocument();
+    expect(hint.id).not.toBe('');
+    expect(
+      (
+        screen.getByRole('textbox').getAttribute('aria-describedby') ?? ''
+      ).split(/\s+/),
+    ).toContain(hint.id);
+  });
+});
+
+describe('imperative ref across editable prop toggles', () => {
+  beforeAll(() => {
+    // jsdom's Range does not implement getBoundingClientRect, which Lexical
+    // calls (via scroll-into-view) when it reconciles a selection while the
+    // editor is focused. Stub it so ref.focus() can run to completion.
+    if (typeof Range.prototype.getBoundingClientRect !== 'function') {
+      Range.prototype.getBoundingClientRect = () => new DOMRect();
+    }
+  });
+
+  it('unlocks focus() once isDisabled is removed', async () => {
+    const ref = createRef<RichTextEditorRef>();
+    const {rerender} = render(
+      <RichTextEditor ref={ref} label="Notes" isDisabled />,
+    );
+    const disabledTextbox = screen.getByRole('textbox');
+    expect(disabledTextbox).toHaveAttribute('contenteditable', 'false');
+
+    // While disabled, focus() is gated: focus must not move and no caret is
+    // placed inside the editor.
+    ref.current?.focus();
+    await new Promise(resolve => setTimeout(resolve, 0));
+    expect(document.activeElement).toBe(document.body);
+    expect(
+      disabledTextbox.contains(window.getSelection()?.anchorNode ?? null),
+    ).toBe(false);
+
+    rerender(<RichTextEditor ref={ref} label="Notes" />);
+    const textbox = screen.getByRole('textbox');
+    // The editor.setEditable sync must re-enable the actual surface, not
+    // just the wrapper styling.
+    expect(textbox).toHaveAttribute('contenteditable', 'true');
+
+    // The same handle now drives real focus into the editor. Lexical focuses
+    // by placing the DOM selection inside the contenteditable; the browser
+    // side effect that moves document.activeElement along with it is not
+    // implemented by jsdom (see the ref.focus() test above), so assert the
+    // jsdom-observable outcome: the caret lands inside the textbox.
+    ref.current?.focus();
+    await waitFor(() => {
+      const anchorNode = window.getSelection()?.anchorNode ?? null;
+      expect(anchorNode).not.toBeNull();
+      expect(textbox.contains(anchorNode)).toBe(true);
+    });
+  });
+});

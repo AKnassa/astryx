@@ -167,5 +167,74 @@ describe('iconRegistry (global, RSC-compatible)', () => {
       resetIcons();
       expect(getExtendedIcon('richtext:bold', 'fallback')).toBe('fallback');
     });
+
+    it('resolves theme icons over global registrations over the caller fallback', () => {
+      // Layer 0: nothing registered — the caller fallback wins.
+      expect(getExtendedIcon('richtext:bold', 'fallback-bold')).toBe(
+        'fallback-bold',
+      );
+
+      // Layer 1: a global registration beats the fallback.
+      registerIcons({'richtext:bold': 'global-bold'});
+      expect(getExtendedIcon('richtext:bold', 'fallback-bold')).toBe(
+        'global-bold',
+      );
+
+      // Layer 2: theme icons beat the global registration.
+      const theme = defineTheme({
+        name: 'brand',
+        icons: {'richtext:bold': 'theme-bold'},
+      });
+      expect(getExtendedIcon('richtext:bold', 'fallback-bold', theme)).toBe(
+        'theme-bold',
+      );
+
+      // Dropping the theme source falls back to the global layer…
+      expect(getExtendedIcon('richtext:bold', 'fallback-bold')).toBe(
+        'global-bold',
+      );
+
+      // …and clearing the global layer restores the caller fallback while the
+      // theme source keeps resolving from its own icons.
+      resetIcons();
+      expect(getExtendedIcon('richtext:bold', 'fallback-bold', theme)).toBe(
+        'theme-bold',
+      );
+      expect(getExtendedIcon('richtext:bold', 'fallback-bold')).toBe(
+        'fallback-bold',
+      );
+    });
+
+    it('keeps extension keys out of the snapshot for a registered theme name', () => {
+      defineTheme({
+        name: 'brand',
+        icons: {'richtext:bold': 'themed-bold', close: 'themed-close'},
+      });
+
+      const registry = getIconRegistry('brand');
+      expect(Object.keys(registry)).toEqual(Object.keys(defaultIcons));
+      expect(Object.keys(registry)).not.toContain('richtext:bold');
+      expect(registry.close).toBe('themed-close');
+    });
+
+    it('defineTheme extends-merge keeps base extension keys and overrides shared ones', () => {
+      const base = defineTheme({
+        name: 'base-brand',
+        icons: {'richtext:bold': 'base-bold', close: 'base-close'},
+      });
+      const child = defineTheme({
+        name: 'child-brand',
+        extends: base,
+        icons: {'richtext:bold': 'child-bold'},
+      });
+
+      expect(child.icons?.['richtext:bold']).toBe('child-bold');
+      expect(child.icons?.close).toBe('base-close');
+      // The merged icons resolve the same way through the icon APIs.
+      expect(getExtendedIcon('richtext:bold', 'fallback', child)).toBe(
+        'child-bold',
+      );
+      expect(getIcon('close', child)).toBe('base-close');
+    });
   });
 });
