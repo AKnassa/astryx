@@ -2993,3 +2993,52 @@ describe('Selector popup theme target', () => {
     },
   );
 });
+
+describe('trigger hit target', () => {
+  // Collects the cssText of every injected StyleX rule that targets one of
+  // the element's classes (vitest runs with runtimeInjection, so the real
+  // rules are present in document.styleSheets).
+  function cssRulesFor(el: Element): string {
+    const classes = [...el.classList];
+    const collected: string[] = [];
+    const visit = (rule: CSSRule) => {
+      if (rule instanceof CSSStyleRule) {
+        if (classes.some(c => rule.selectorText.includes(`.${c}`))) {
+          collected.push(rule.cssText);
+        }
+      } else if (rule instanceof CSSMediaRule) {
+        for (const inner of rule.cssRules) {
+          if (
+            inner instanceof CSSStyleRule &&
+            classes.some(c => inner.selectorText.includes(`.${c}`))
+          ) {
+            collected.push(`@media ${rule.conditionText} { ${inner.cssText} }`);
+          }
+        }
+      }
+    };
+    for (const sheet of document.styleSheets) {
+      let rules: CSSRuleList;
+      try {
+        rules = sheet.cssRules;
+      } catch {
+        continue;
+      }
+      for (const rule of rules) {
+        visit(rule);
+      }
+    }
+    return collected.join('\n');
+  }
+
+  it('stretches the combobox button across the container block size (WCAG 2.5.8)', () => {
+    render(<Selector label="Fruit" size="sm" options={OPTIONS} />);
+    const button = screen.getByRole('combobox');
+    const css = cssRulesFor(button);
+    // The interactive element itself must span the sized container: the
+    // container is 28px tall (--size-element-sm) but a padding-less button
+    // collapses to its ~20px line box — under the WCAG 2.5.8 24px minimum.
+    expect(css).toMatch(/align-self:\s*stretch/);
+    expect(css).toMatch(/padding-(block|top)/);
+  });
+});

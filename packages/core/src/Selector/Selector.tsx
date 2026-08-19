@@ -93,7 +93,12 @@ const styles = stylex.create({
     justifyContent: 'space-between',
     gap: spacingVars['--spacing-2'],
     width: '100%',
-    paddingBlock: spacingVars['--spacing-2'],
+    // Block padding lives on the combobox button (styles.trigger), not here:
+    // the button is the measured interactive element, and padding on the
+    // container would collapse it to its ~20px line box — under the
+    // WCAG 2.5.8 24px minimum. Zero (not absent) so the base input wrapper's
+    // own block padding cannot reintroduce the collapse.
+    paddingBlock: 0,
     paddingInline: spacingVars['--spacing-3'],
     fontFamily: typographyVars['--font-family-body'],
     fontSize: {
@@ -114,7 +119,12 @@ const styles = stylex.create({
     flexShrink: 1,
     flexBasis: 0,
     minWidth: 0,
+    // Stretch across the container and carry the block padding so the
+    // button's hit area spans the full control height (WCAG 2.5.8); the
+    // rendered text keeps the same inset the container used to provide.
+    alignSelf: 'stretch',
     padding: 0,
+    paddingBlock: spacingVars['--spacing-2'],
     margin: 0,
     borderWidth: 0,
     borderStyle: 'none',

@@ -130,6 +130,23 @@ const toolbarDividerStyles = stylex.create({
   },
 });
 
+// The toolbar's controls sit at 28px (--size-element-sm) — above the
+// WCAG 2.5.8 AA 24px minimum for fine pointers, but well under the ~44px
+// platform touch target. Expand them on coarse pointers only, mirroring the
+// Slider-thumb precedent in core.
+const toolbarTouchStyles = stylex.create({
+  control: {
+    minBlockSize: {
+      default: null,
+      '@media (pointer: coarse)': '44px',
+    },
+    minInlineSize: {
+      default: null,
+      '@media (pointer: coarse)': '44px',
+    },
+  },
+});
+
 const toolbarScrollStyles = stylex.create({
   actions: {
     flex: '1 1 0%',
@@ -853,6 +870,7 @@ export function RichTextEditorToolbar({
               variant="ghost"
               tooltip={t('@astryx.richTextEditor.undo')}
               isDisabled={!isEditable || !canUndo}
+              xstyle={toolbarTouchStyles.control}
               onClick={() => editor.dispatchCommand(UNDO_COMMAND, undefined)}
             />
             <IconButton
@@ -861,6 +879,7 @@ export function RichTextEditorToolbar({
               variant="ghost"
               tooltip={t('@astryx.richTextEditor.redo')}
               isDisabled={!isEditable || !canRedo}
+              xstyle={toolbarTouchStyles.control}
               onClick={() => editor.dispatchCommand(REDO_COMMAND, undefined)}
             />
             <Divider
@@ -877,6 +896,7 @@ export function RichTextEditorToolbar({
               options={blockOptions}
               startIcon={resolveIcon(blockType)}
               isDisabled={!isEditable}
+              xstyle={toolbarTouchStyles.control}
               onChange={value => setBlock(value as BlockType)}
             />
             <Divider
@@ -893,6 +913,7 @@ export function RichTextEditorToolbar({
                 isIconOnly
                 isPressed={activeFormats.has(action.format)}
                 isDisabled={!isEditable}
+                xstyle={toolbarTouchStyles.control}
                 onPressedChange={() => toggleInlineFormat(action.format)}
               />
             ))}
@@ -905,6 +926,7 @@ export function RichTextEditorToolbar({
                 isIconOnly
                 isPressed={isLink || isLinkDialogOpen}
                 isDisabled={!isEditable}
+                xstyle={toolbarTouchStyles.control}
                 aria-haspopup="dialog"
                 aria-expanded={isLinkDialogOpen}
                 onMouseDown={event => event.preventDefault()}

@@ -46,6 +46,7 @@ import {
   NEW_TAB_LINK_ATTRIBUTES,
 } from './RichTextEditorAutoLinkPlugin';
 import {sanitizeUrl, validateUrl} from './linkUtils';
+import * as stylex from '@stylexjs/stylex';
 
 // Closed popover-backed tooltips are intentionally hidden from the default
 // accessibility tree until their trigger opens them.
@@ -1801,5 +1802,58 @@ describe('i18n', () => {
     await waitFor(() =>
       expect(screen.getByText('URL invalide.')).toBeInTheDocument(),
     );
+  });
+});
+
+describe('toolbar touch targets', () => {
+  // StyleX class names are content-addressed: identical declarations compile
+  // to identical atomic classes. Compiling the expected declarations here and
+  // asserting the toolbar controls carry those exact classes proves the
+  // coarse-pointer floor is applied, without depending on jsdom's partial
+  // media-rule injection.
+  const expectedFloor = stylex.create({
+    control: {
+      minBlockSize: {
+        default: null,
+        '@media (pointer: coarse)': '44px',
+      },
+      minInlineSize: {
+        default: null,
+        '@media (pointer: coarse)': '44px',
+      },
+    },
+  });
+
+  // Only atomic classes are content-addressed across files; drop the
+  // human-readable debug name.
+  const floorClasses = (stylex.props(expectedFloor.control).className ?? '')
+    .split(/\s+/)
+    .filter(c => /^x[a-z0-9]+$/.test(c));
+
+  it('compiles a non-empty coarse-pointer floor fixture', () => {
+    expect(floorClasses.length).toBeGreaterThan(0);
+  });
+
+  it('expands the history and formatting buttons on coarse pointers', () => {
+    render(
+      <RichTextEditor label="Notes" toolbar={<RichTextEditorToolbar />} />,
+    );
+    const undo = screen.getByRole('button', {name: 'Undo'});
+    const bold = screen.getByRole('button', {name: 'Bold'});
+    for (const cls of floorClasses) {
+      expect([...undo.classList]).toContain(cls);
+      expect([...bold.classList]).toContain(cls);
+    }
+  });
+
+  it('expands the block-format selector on coarse pointers', () => {
+    render(
+      <RichTextEditor label="Notes" toolbar={<RichTextEditorToolbar />} />,
+    );
+    const combobox = screen.getByRole('combobox', {name: 'Block format'});
+    const container = combobox.parentElement as HTMLElement;
+    for (const cls of floorClasses) {
+      expect([...container.classList]).toContain(cls);
+    }
   });
 });
