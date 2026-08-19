@@ -59,7 +59,7 @@ function themePropsSites(): ThemePropsSite[] {
   const sites: ThemePropsSite[] = [];
   for (const file of files) {
     const src = readFileSync(join(SRC_DIR, file), 'utf8');
-    const re = /themeProps\(\s*'([^']+)'\s*(?:,\s*\{([\s\S]*?)\}\s*)?\)/g;
+    const re = /themeProps\(\s*'([^']+)'\s*(?:,\s*\{([\s\S]*?)\}\s*,?\s*)?\)/g;
     for (const match of src.matchAll(re)) {
       const [, name, body] = match;
       const keys =
@@ -87,6 +87,29 @@ function docTargets(): DocTarget[] {
   };
   return mod.docs?.theming?.targets ?? [];
 }
+
+describe('themeProps extraction', () => {
+  it('parses both prettier call shapes (hug and expanded with trailing comma)', () => {
+    const hug = `themeProps('rich-text-editor', {size, status: s ?? null})`;
+    const expanded = `themeProps(
+      'rich-text-editor',
+      {
+        size,
+        status: s ?? null,
+      },
+    )`;
+    for (const src of [hug, expanded]) {
+      const re =
+        /themeProps\(\s*'([^']+)'\s*(?:,\s*\{([\s\S]*?)\}\s*,?\s*)?\)/g;
+      const match = [...src.matchAll(re)];
+      expect(match).toHaveLength(1);
+      expect(match[0][1]).toBe('rich-text-editor');
+      expect(
+        splitTopLevel(match[0][2]).map(part => part.split(':')[0].trim()),
+      ).toEqual(['size', 'status']);
+    }
+  });
+});
 
 describe('richtext theming targets', () => {
   it('finds the themeProps call sites it guards', () => {

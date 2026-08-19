@@ -60,6 +60,16 @@ describe('iconRegistry (global, RSC-compatible)', () => {
     expect(getIconRegistry().check).toBe(defaultIcons.check);
   });
 
+  it('keeps theme extension keys out of the typed registry snapshot', () => {
+    // Themes may carry extension keys (e.g. 'richtext:bold'); the snapshot is
+    // typed Record<IconName, ReactNode>, so only built-in names may enter it.
+    const registry = getIconRegistry({
+      icons: {'richtext:bold': 'themed-bold', close: 'themed-close'},
+    } as unknown as Parameters<typeof getIconRegistry>[0]);
+    expect(Object.keys(registry)).not.toContain('richtext:bold');
+    expect(registry.close).toBe('themed-close');
+  });
+
   it('falls back to defaults for unregistered names', () => {
     registerIcons({close: 'custom-close'});
     // 'check' was not registered, should fall back to default

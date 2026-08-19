@@ -13,7 +13,7 @@
  */
 
 import {describe, it, expect, vi, beforeAll, afterAll} from 'vitest';
-import {render, screen, waitFor, fireEvent} from '@testing-library/react';
+import {render, screen, waitFor, fireEvent, act} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import {createRef, useEffect} from 'react';
 import {useLexicalComposerContext} from '@lexical/react/LexicalComposerContext';
@@ -1905,5 +1905,51 @@ describe('toolbar icons', () => {
         true,
       );
     }
+  });
+});
+
+describe('editable state follows prop changes', () => {
+  it('disables editing and announces it when isDisabled turns on after mount', () => {
+    const {rerender} = render(<RichTextEditor label="Notes" />);
+    expect(screen.getByRole('textbox')).toHaveAttribute(
+      'contenteditable',
+      'true',
+    );
+    rerender(<RichTextEditor label="Notes" isDisabled />);
+    const textbox = screen.getByRole('textbox');
+    // The surface must actually stop accepting input, not only announce it.
+    expect(textbox).toHaveAttribute('contenteditable', 'false');
+    expect(textbox).toHaveAttribute('aria-disabled', 'true');
+    expect(textbox).not.toHaveAttribute('aria-readonly');
+  });
+
+  it('becomes editable when isReadOnly turns off after mount', () => {
+    const {rerender} = render(<RichTextEditor label="Notes" isReadOnly />);
+    expect(screen.getByRole('textbox')).toHaveAttribute(
+      'contenteditable',
+      'false',
+    );
+    rerender(<RichTextEditor label="Notes" />);
+    const textbox = screen.getByRole('textbox');
+    expect(textbox).toHaveAttribute('contenteditable', 'true');
+    expect(textbox).not.toHaveAttribute('aria-readonly');
+  });
+
+  it("keeps Lexical's read-only announcement when a plugin disables editing", () => {
+    let captured: LexicalEditor | null = null;
+    render(
+      <RichTextEditor
+        label="Notes"
+        plugins={<CaptureEditor onReady={editor => (captured = editor)} />}
+      />,
+    );
+    act(() => {
+      (captured as unknown as LexicalEditor).setEditable(false);
+    });
+    const textbox = screen.getByRole('textbox');
+    expect(textbox).toHaveAttribute('contenteditable', 'false');
+    // Neither prop is set, so the component must not clobber Lexical's own
+    // state-derived aria-readonly with undefined.
+    expect(textbox).toHaveAttribute('aria-readonly', 'true');
   });
 });

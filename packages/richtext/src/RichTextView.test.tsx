@@ -69,6 +69,8 @@ describe('RichTextView accessibility', () => {
     const textbox = screen.getByRole('textbox');
     expect(textbox).toHaveAttribute('aria-readonly', 'true');
     expect(textbox).not.toHaveAttribute('aria-disabled');
+    // Same content model as the editor surface: a multiline textbox.
+    expect(textbox).toHaveAttribute('aria-multiline', 'true');
   });
 
   it('keeps the read-only surface keyboard reachable', async () => {

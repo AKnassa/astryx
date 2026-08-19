@@ -19,7 +19,7 @@ import {useEffect, useRef, useState, type ReactNode, type Ref} from 'react';
 import * as stylex from '@stylexjs/stylex';
 import {sharedEditorTheme} from './editorTheme';
 import type {BaseProps} from '@astryxdesign/core';
-import {mergeProps} from '@astryxdesign/core/utils';
+import {mergeProps, warnOnce} from '@astryxdesign/core/utils';
 
 import {
   LexicalComposer,
@@ -160,6 +160,14 @@ export function RichTextView({
   style,
   ...rest
 }: RichTextViewProps) {
+  if (label == null) {
+    warnOnce(
+      'richtext:view-needs-label',
+      'RichTextView',
+      'RichTextView renders a keyboard-reachable textbox; pass `label` so it has an accessible name (axe aria-input-field-name).',
+    );
+  }
+
   const themeRef = useRef<EditorThemeClasses | null>(null);
   if (themeRef.current === null) {
     themeRef.current = sharedEditorTheme();
@@ -223,7 +231,7 @@ export function RichTextView({
           contentEditable={
             // A read-only textbox still needs a name and must stay in the tab
             // order so keyboard and screen-reader users can reach and read it.
-            <ContentEditable ariaLabel={label} tabIndex={0} />
+            <ContentEditable ariaLabel={label} ariaMultiline tabIndex={0} />
           }
           placeholder={null}
           ErrorBoundary={LexicalErrorBoundary}

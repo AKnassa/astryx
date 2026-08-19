@@ -566,7 +566,9 @@ export function RichTextEditorToolbar({
   const [isLinkDialogOpen, setIsLinkDialogOpen] = useState(false);
   const [isEditingLink, setIsEditingLink] = useState(false);
   const [linkUrl, setLinkUrl] = useState('');
-  const [linkError, setLinkError] = useState('');
+  // A flag, not a message: the error text is translated at render time so
+  // it follows locale changes while the dialog stays open.
+  const [hasLinkError, setHasLinkError] = useState(false);
 
   const $syncToolbar = useCallback(() => {
     const selection = $getSelection();
@@ -720,7 +722,7 @@ export function RichTextEditorToolbar({
           : 'https://'),
     );
     setIsEditingLink(context.isLink);
-    setLinkError('');
+    setHasLinkError(false);
     setIsLinkDialogOpen(true);
   }, [
     applyLinkValue,
@@ -732,12 +734,12 @@ export function RichTextEditorToolbar({
 
   const handleLinkDialogOpenChange = useCallback((open: boolean) => {
     setIsLinkDialogOpen(open);
-    setLinkError('');
+    setHasLinkError(false);
   }, []);
 
   const closeLinkDialogToEditor = useCallback(() => {
     setIsLinkDialogOpen(false);
-    setLinkError('');
+    setHasLinkError(false);
     requestAnimationFrame(() => editor.focus());
   }, [editor]);
 
@@ -745,12 +747,12 @@ export function RichTextEditorToolbar({
     (event: FormEvent<HTMLElement>) => {
       event.preventDefault();
       if (!applyLinkValue(linkUrl)) {
-        setLinkError(t('@astryx.richTextEditor.invalidUrl'));
+        setHasLinkError(true);
         return;
       }
       closeLinkDialogToEditor();
     },
-    [applyLinkValue, closeLinkDialogToEditor, linkUrl, t],
+    [applyLinkValue, closeLinkDialogToEditor, linkUrl],
   );
 
   const removeLink = useCallback(() => {
@@ -1006,14 +1008,17 @@ export function RichTextEditorToolbar({
                     width="100%"
                     hasAutoFocus
                     status={
-                      linkError
-                        ? {type: 'error', message: linkError}
+                      hasLinkError
+                        ? {
+                            type: 'error',
+                            message: t('@astryx.richTextEditor.invalidUrl'),
+                          }
                         : undefined
                     }
                     statusVariant="detached"
                     onChange={value => {
                       setLinkUrl(value);
-                      setLinkError('');
+                      setHasLinkError(false);
                     }}
                   />
                 </LayoutContent>

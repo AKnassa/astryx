@@ -820,6 +820,15 @@ function EditorRefBridge({
   transformers: Transformer[];
 }): null {
   const [editor] = useLexicalComposerContext();
+
+  // `initialConfig.editable` is only read once, on composer init — a later
+  // isReadOnly/isDisabled prop change would otherwise leave contenteditable
+  // frozen at its mount value while the wrapper styling and ARIA follow the
+  // props. Keep the actual Lexical editable state in sync.
+  useEffect(() => {
+    editor.setEditable(editable);
+  }, [editor, editable]);
+
   useImperativeHandle(
     editorRef,
     () => ({
@@ -935,11 +944,16 @@ function EditorContentEditable({
     // Lexical announces every non-editable surface as aria-readonly and
     // leaves it out of the tab order. Split the two states: read-only stays
     // reachable (tabIndex 0) and announced read-only; disabled is announced
-    // disabled instead. These keys land after Lexical's computed attributes,
-    // so an explicit `undefined` removes the wrong announcement.
-    tabIndex: isReadOnly && !isDisabled ? 0 : undefined,
-    'aria-readonly': isReadOnly && !isDisabled ? ('true' as const) : undefined,
-    'aria-disabled': isDisabled ? ('true' as const) : undefined,
+    // disabled instead. The keys land after Lexical's computed attributes,
+    // so the disabled branch's explicit `undefined` removes the wrong
+    // read-only announcement. When neither prop is set, no keys are passed
+    // at all — a consumer plugin may drive editor.setEditable directly, and
+    // Lexical's own state-derived aria-readonly must survive.
+    ...(isDisabled
+      ? {'aria-disabled': 'true' as const, 'aria-readonly': undefined}
+      : isReadOnly
+        ? {tabIndex: 0, 'aria-readonly': 'true' as const}
+        : null),
     ...stylex.props(
       styles.contentEditable,
       dynamicStyles.contentEditableMinHeight(minHeight),
