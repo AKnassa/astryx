@@ -75,6 +75,7 @@ import {
   LayoutFooter,
 } from '@astryxdesign/core/Layout';
 import {getExtendedIcon} from '@astryxdesign/core/Icon';
+import {useTranslator} from '@astryxdesign/core/i18n';
 import {
   FORMAT_TEXT_COMMAND,
   UNDO_COMMAND,
@@ -100,10 +101,10 @@ import {sanitizeUrl} from './linkUtils';
 type BlockType =
   'paragraph' | 'h1' | 'h2' | 'h3' | 'quote' | 'bullet' | 'number';
 
-const HEADING_LABELS: Record<'h1' | 'h2' | 'h3', string> = {
-  h1: 'Heading 1',
-  h2: 'Heading 2',
-  h3: 'Heading 3',
+const HEADING_LABEL_KEYS: Record<'h1' | 'h2' | 'h3', string> = {
+  h1: '@astryx.richTextEditor.heading1',
+  h2: '@astryx.richTextEditor.heading2',
+  h3: '@astryx.richTextEditor.heading3',
 };
 
 /**
@@ -177,15 +178,27 @@ export const RICHTEXT_ICON_KEYS = {
 } as const;
 
 const INLINE_FORMAT_ACTIONS = [
-  {format: 'bold', label: 'Bold', icon: 'bold'},
-  {format: 'italic', label: 'Italic', icon: 'italic'},
-  {format: 'underline', label: 'Underline', icon: 'underline'},
+  {format: 'bold', labelKey: '@astryx.richTextEditor.bold', icon: 'bold'},
+  {
+    format: 'italic',
+    labelKey: '@astryx.richTextEditor.italic',
+    icon: 'italic',
+  },
+  {
+    format: 'underline',
+    labelKey: '@astryx.richTextEditor.underline',
+    icon: 'underline',
+  },
   {
     format: 'strikethrough',
-    label: 'Strikethrough',
+    labelKey: '@astryx.richTextEditor.strikethrough',
     icon: 'strikethrough',
   },
-  {format: 'code', label: 'Inline code', icon: 'code'},
+  {
+    format: 'code',
+    labelKey: '@astryx.richTextEditor.inlineCode',
+    icon: 'code',
+  },
 ] as const;
 
 type InlineFormat = (typeof INLINE_FORMAT_ACTIONS)[number]['format'];
@@ -408,8 +421,8 @@ function resolveIcon(name: keyof typeof RICHTEXT_ICON_KEYS): ReactNode {
 
 export interface RichTextEditorToolbarProps {
   /**
-   * Accessible label for the toolbar element.
-   * @default 'Text formatting'
+   * Accessible label for the toolbar element. Defaults to the localized
+   * "Text formatting".
    */
   label?: string;
   /**
@@ -480,7 +493,7 @@ export interface RichTextEditorToolbarProps {
  * ```
  */
 export function RichTextEditorToolbar({
-  label = 'Text formatting',
+  label,
   headingLevels = ['h1', 'h2', 'h3'],
   size = 'sm',
   hasLink = true,
@@ -488,6 +501,8 @@ export function RichTextEditorToolbar({
   linkOpensInNewTab = true,
   endContent,
 }: RichTextEditorToolbarProps) {
+  const t = useTranslator();
+  const toolbarLabel = label ?? t('@astryx.richTextEditor.toolbarLabel');
   const [editor] = useLexicalComposerContext();
   const [activeFormats, setActiveFormats] = useState<Set<string>>(new Set());
   const [blockType, setBlockType] = useState<BlockType>('paragraph');
@@ -683,12 +698,12 @@ export function RichTextEditorToolbar({
     (event: FormEvent<HTMLElement>) => {
       event.preventDefault();
       if (!applyLinkValue(linkUrl)) {
-        setLinkError('Enter a valid http, https, mailto, or tel URL.');
+        setLinkError(t('@astryx.richTextEditor.invalidUrl'));
         return;
       }
       closeLinkDialogToEditor();
     },
-    [applyLinkValue, closeLinkDialogToEditor, linkUrl],
+    [applyLinkValue, closeLinkDialogToEditor, linkUrl, t],
   );
 
   const removeLink = useCallback(() => {
@@ -796,61 +811,65 @@ export function RichTextEditorToolbar({
   const blockOptions: SelectorOptionType[] = [
     {
       value: 'paragraph',
-      label: 'Paragraph',
+      label: t('@astryx.richTextEditor.paragraph'),
       icon: resolveIcon('paragraph'),
     },
     ...headingLevels.map(level => ({
       value: level,
-      label: HEADING_LABELS[level],
+      label: t(HEADING_LABEL_KEYS[level]),
       icon: resolveIcon(level),
     })),
     {
       value: 'bullet',
-      label: 'Bulleted list',
+      label: t('@astryx.richTextEditor.bulletedList'),
       icon: resolveIcon('bullet'),
     },
     {
       value: 'number',
-      label: 'Numbered list',
+      label: t('@astryx.richTextEditor.numberedList'),
       icon: resolveIcon('number'),
     },
-    {value: 'quote', label: 'Block quote', icon: resolveIcon('quote')},
+    {
+      value: 'quote',
+      label: t('@astryx.richTextEditor.blockQuote'),
+      icon: resolveIcon('quote'),
+    },
   ];
 
   return (
     <>
       <Toolbar
-        label={label}
+        label={toolbarLabel}
         size={size}
         startContent={
           <HStack
             gap={1}
             role="group"
-            aria-label="Formatting actions"
+            aria-label={t('@astryx.richTextEditor.formattingActions')}
             xstyle={toolbarScrollStyles.actions}>
             <IconButton
-              label="Undo"
+              label={t('@astryx.richTextEditor.undo')}
               icon={resolveIcon('undo')}
               variant="ghost"
-              tooltip="Undo"
+              tooltip={t('@astryx.richTextEditor.undo')}
               isDisabled={!isEditable || !canUndo}
               onClick={() => editor.dispatchCommand(UNDO_COMMAND, undefined)}
             />
             <IconButton
-              label="Redo"
+              label={t('@astryx.richTextEditor.redo')}
               icon={resolveIcon('redo')}
               variant="ghost"
-              tooltip="Redo"
+              tooltip={t('@astryx.richTextEditor.redo')}
               isDisabled={!isEditable || !canRedo}
               onClick={() => editor.dispatchCommand(REDO_COMMAND, undefined)}
             />
             <Divider
               orientation="vertical"
-              aria-label="History and block formats"
+              aria-label={t('@astryx.richTextEditor.historyAndBlockFormats')}
               xstyle={toolbarDividerStyles.vertical}
             />
             <Selector
-              label="Block format"
+              label={t('@astryx.richTextEditor.blockFormat')}
               isLabelHidden
               variant="ghost"
               size={size}
@@ -862,13 +881,13 @@ export function RichTextEditorToolbar({
             />
             <Divider
               orientation="vertical"
-              aria-label="Block and inline formats"
+              aria-label={t('@astryx.richTextEditor.blockAndInlineFormats')}
               xstyle={toolbarDividerStyles.vertical}
             />
             {INLINE_FORMAT_ACTIONS.map(action => (
               <ToggleButton
                 key={action.format}
-                label={action.label}
+                label={t(action.labelKey)}
                 icon={resolveIcon(action.icon)}
                 size={size}
                 isIconOnly
@@ -880,7 +899,7 @@ export function RichTextEditorToolbar({
             {hasLink && (
               <ToggleButton
                 key="link"
-                label="Link"
+                label={t('@astryx.richTextEditor.link')}
                 icon={resolveIcon('link')}
                 size={size}
                 isIconOnly
@@ -912,14 +931,18 @@ export function RichTextEditorToolbar({
               height="auto"
               header={
                 <DialogHeader
-                  title={isEditingLink ? 'Edit link' : 'Insert link'}
+                  title={
+                    isEditingLink
+                      ? t('@astryx.richTextEditor.editLink')
+                      : t('@astryx.richTextEditor.insertLink')
+                  }
                   onOpenChange={handleLinkDialogOpenChange}
                 />
               }
               content={
                 <LayoutContent>
                   <TextInput
-                    label="URL"
+                    label={t('@astryx.richTextEditor.url')}
                     value={linkUrl}
                     width="100%"
                     hasAutoFocus
@@ -941,18 +964,22 @@ export function RichTextEditorToolbar({
                   <HStack gap={2} hAlign="end">
                     {isEditingLink && (
                       <Button
-                        label="Remove link"
+                        label={t('@astryx.richTextEditor.removeLink')}
                         variant="destructive"
                         onClick={removeLink}
                       />
                     )}
                     <Button
-                      label="Cancel"
+                      label={t('@astryx.richTextEditor.cancel')}
                       variant="secondary"
                       onClick={() => handleLinkDialogOpenChange(false)}
                     />
                     <Button
-                      label={isEditingLink ? 'Update link' : 'Add link'}
+                      label={
+                        isEditingLink
+                          ? t('@astryx.richTextEditor.updateLink')
+                          : t('@astryx.richTextEditor.addLink')
+                      }
                       variant="primary"
                       type="submit"
                     />

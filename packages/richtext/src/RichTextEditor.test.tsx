@@ -39,6 +39,7 @@ import {
 } from './markdownSerializers';
 import {RichTextEditorToolbar} from './RichTextEditorToolbar';
 import {registerIcons, resetIcons} from '@astryxdesign/core/Icon';
+import {InternationalizationProvider} from '@astryxdesign/core/i18n';
 import {
   RichTextEditorAutoLinkPlugin,
   DEFAULT_LINK_MATCHERS,
@@ -1700,5 +1701,105 @@ describe('RichTextEditorToolbar — new-tab links', () => {
       expect(sawLink).toBe(true);
       expect(target).toBeNull();
     });
+  });
+});
+
+describe('i18n', () => {
+  it('routes toolbar strings through the translation catalog', async () => {
+    render(
+      <InternationalizationProvider
+        locale="fr"
+        overrides={{
+          fr: {
+            '@astryx.richTextEditor.bold': 'Gras',
+            '@astryx.richTextEditor.blockFormat': 'Format de bloc',
+            '@astryx.richTextEditor.toolbarLabel': 'Mise en forme du texte',
+            '@astryx.richTextEditor.insertLink': 'Insérer un lien',
+          },
+        }}>
+        <RichTextEditor label="Notes" toolbar={<RichTextEditorToolbar />} />
+      </InternationalizationProvider>,
+    );
+    expect(
+      await screen.findByRole('button', {name: 'Gras'}),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole('combobox', {name: 'Format de bloc'}),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole('toolbar', {name: 'Mise en forme du texte'}),
+    ).toBeInTheDocument();
+  });
+
+  it('renders English toolbar strings with no provider', () => {
+    render(
+      <RichTextEditor label="Notes" toolbar={<RichTextEditorToolbar />} />,
+    );
+    expect(screen.getByRole('button', {name: 'Bold'})).toBeInTheDocument();
+    expect(
+      screen.getByRole('toolbar', {name: 'Text formatting'}),
+    ).toBeInTheDocument();
+  });
+
+  it('routes the counter announcement through the translation catalog', async () => {
+    render(
+      <InternationalizationProvider
+        locale="fr"
+        overrides={{
+          fr: {
+            '@astryx.richTextEditor.charactersOverLimit':
+              '{count, number} au-dessus de la limite',
+          },
+        }}>
+        <RichTextEditor
+          label="Notes"
+          defaultValue={HELLO_STATE}
+          maxLength={5}
+        />
+      </InternationalizationProvider>,
+    );
+    // "Hello world" is 11 characters; 6 over the 5-character limit.
+    await waitFor(() =>
+      expect(screen.getByText('6 au-dessus de la limite')).toBeInTheDocument(),
+    );
+  });
+
+  it('routes the tab-escape hint through the translation catalog', () => {
+    render(
+      <InternationalizationProvider
+        locale="fr"
+        overrides={{
+          fr: {
+            '@astryx.richTextEditor.tabEscapeHint':
+              'Échap puis Tab pour sortir.',
+          },
+        }}>
+        <RichTextEditor label="Notes" />
+      </InternationalizationProvider>,
+    );
+    expect(screen.getByText('Échap puis Tab pour sortir.')).toBeInTheDocument();
+  });
+
+  it('routes the link-dialog URL error through the translation catalog', async () => {
+    const user = userEvent.setup();
+    render(
+      <InternationalizationProvider
+        locale="fr"
+        overrides={{
+          fr: {'@astryx.richTextEditor.invalidUrl': 'URL invalide.'},
+        }}>
+        <RichTextEditor label="Notes" toolbar={<RichTextEditorToolbar />} />
+      </InternationalizationProvider>,
+    );
+    await user.click(screen.getByRole('button', {name: 'Link', ...h}));
+    const urlInput = await screen.findByRole('textbox', {name: 'URL', ...h});
+    await user.clear(urlInput);
+    await user.type(urlInput, 'javascript:alert(1)');
+    await user.click(
+      screen.getByRole('button', {name: /Add link|Ajouter/, ...h}),
+    );
+    await waitFor(() =>
+      expect(screen.getByText('URL invalide.')).toBeInTheDocument(),
+    );
   });
 });

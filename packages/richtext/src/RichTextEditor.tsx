@@ -57,6 +57,7 @@ import {useInputStatusIcon} from '@astryxdesign/core/hooks';
 import {VisuallyHidden} from '@astryxdesign/core/VisuallyHidden';
 import {mergeProps, themeProps, type SizeValue} from '@astryxdesign/core/utils';
 import {useSize} from '@astryxdesign/core/SizeContext';
+import {useTranslator} from '@astryxdesign/core/i18n';
 
 import {
   LexicalComposer,
@@ -225,13 +226,6 @@ const editorBodySizeStyles = stylex.create({
     paddingBlock: spacingVars['--spacing-2'],
   },
 });
-
-/**
- * Default screen-reader hint advertising the Tab escape. Overridable (or
- * suppressible) via the `tabEscapeHint` prop for localization.
- */
-const DEFAULT_TAB_ESCAPE_HINT =
-  'Press Escape then Tab to move focus out of the editor.';
 
 /**
  * Fraction of `maxLength` at which the character counter begins announcing
@@ -419,10 +413,10 @@ export interface RichTextEditorProps extends Omit<
   /**
    * Screen-reader hint describing how to move focus out of the editor, since
    * Tab is bound to indentation (press Escape, then Tab). Rendered visually
-   * hidden and referenced from the editor's `aria-describedby`. Override it
-   * to localize the text, or pass an empty string to omit the hint entirely
-   * (e.g. when the host app provides its own instructions).
-   * @default 'Press Escape then Tab to move focus out of the editor.'
+   * hidden and referenced from the editor's `aria-describedby`. Defaults to
+   * the localized "Press Escape then Tab to move focus out of the editor."
+   * Override it to customize the text, or pass an empty string to omit the
+   * hint entirely (e.g. when the host app provides its own instructions).
    */
   tabEscapeHint?: string;
   /**
@@ -492,7 +486,7 @@ export const RichTextEditor = forwardRef<
     hasMarkdownShortcuts = true,
     transformers = TRANSFORMERS,
     hasAutoFocus = false,
-    tabEscapeHint = DEFAULT_TAB_ESCAPE_HINT,
+    tabEscapeHint,
     maxLength,
     namespace = 'astryx-editor',
     xstyle,
@@ -502,6 +496,7 @@ export const RichTextEditor = forwardRef<
   }: RichTextEditorProps,
   ref: Ref<RichTextEditorRef>,
 ) {
+  const t = useTranslator();
   const size = useSize(sizeProp, 'md');
   const inputID = useId();
   const labelID = useId();
@@ -541,7 +536,9 @@ export const RichTextEditor = forwardRef<
     },
   };
 
-  const hasTabEscapeHint = editable && tabEscapeHint !== '';
+  const resolvedTabEscapeHint =
+    tabEscapeHint ?? t('@astryx.richTextEditor.tabEscapeHint');
+  const hasTabEscapeHint = editable && resolvedTabEscapeHint !== '';
   const hasToolbar = toolbar != null && typeof toolbar !== 'boolean';
 
   const {statusIcon, describedBy: statusTooltipDescribedBy} =
@@ -673,7 +670,9 @@ export const RichTextEditor = forwardRef<
           </div>
         </LexicalComposer>
         {hasTabEscapeHint && (
-          <VisuallyHidden id={tabEscapeHintID}>{tabEscapeHint}</VisuallyHidden>
+          <VisuallyHidden id={tabEscapeHintID}>
+            {resolvedTabEscapeHint}
+          </VisuallyHidden>
         )}
       </div>
       {maxLength != null && (
@@ -687,8 +686,12 @@ export const RichTextEditor = forwardRef<
           <VisuallyHidden aria-live="polite">
             {charCount >= maxLength * COUNTER_WARNING_THRESHOLD
               ? charCount > maxLength
-                ? `${charCount - maxLength} characters over limit`
-                : `${maxLength - charCount} characters remaining`
+                ? t('@astryx.richTextEditor.charactersOverLimit', {
+                    count: charCount - maxLength,
+                  })
+                : t('@astryx.richTextEditor.charactersRemaining', {
+                    count: maxLength - charCount,
+                  })
               : ''}
           </VisuallyHidden>
         </div>
