@@ -47,6 +47,8 @@ import {
 } from './RichTextEditorAutoLinkPlugin';
 import {sanitizeUrl, validateUrl} from './linkUtils';
 import * as stylex from '@stylexjs/stylex';
+import {defineTheme, Theme} from '@astryxdesign/core/theme';
+import {rtlStyles} from '@astryxdesign/core/utils';
 
 // Closed popover-backed tooltips are intentionally hidden from the default
 // accessibility tree until their trigger opens them.
@@ -1854,6 +1856,54 @@ describe('toolbar touch targets', () => {
     const container = combobox.parentElement as HTMLElement;
     for (const cls of floorClasses) {
       expect([...container.classList]).toContain(cls);
+    }
+  });
+});
+
+describe('toolbar icons', () => {
+  it('lets a theme override richtext:* icons via defineTheme({icons})', () => {
+    const theme = defineTheme({
+      name: 'richtext-icon-test',
+      icons: {'richtext:bold': <span data-testid="themed-bold">B</span>},
+    });
+    render(
+      <Theme theme={theme}>
+        <RichTextEditor label="Notes" toolbar={<RichTextEditorToolbar />} />
+      </Theme>,
+    );
+    expect(screen.getByTestId('themed-bold')).toBeInTheDocument();
+  });
+
+  it('draws heading text glyphs with tokens, not inline styles', () => {
+    render(
+      <RichTextEditor label="Notes" toolbar={<RichTextEditorToolbar />} />,
+    );
+    const glyph = screen.getAllByText('¶')[0];
+    // Raw inline font styling is unreachable by themes; the glyph must be
+    // styled through StyleX tokens.
+    expect(glyph.getAttribute('style')).toBeNull();
+    expect([...glyph.classList].some(c => c.startsWith('x'))).toBe(true);
+  });
+
+  it('mirrors the undo/redo glyphs in RTL', () => {
+    render(
+      <RichTextEditor label="Notes" toolbar={<RichTextEditorToolbar />} />,
+    );
+    // rtlStyles.mirror is the shared cross-package mirror style; its atomic
+    // classes are content-addressed, so carrying them proves the glyph flips
+    // under [dir="rtl"].
+    const mirrorClasses = (stylex.props(rtlStyles.mirror).className ?? '')
+      .split(/\s+/)
+      .filter(c => /^x[a-z0-9]+$/.test(c));
+    expect(mirrorClasses.length).toBeGreaterThan(0);
+    for (const name of ['Undo', 'Redo']) {
+      const button = screen.getByRole('button', {name});
+      const mirrored = [...button.querySelectorAll('*')].some(el =>
+        mirrorClasses.every(c => (el as HTMLElement).classList.contains(c)),
+      );
+      expect(mirrored, `${name} glyph should carry rtlStyles.mirror`).toBe(
+        true,
+      );
     }
   });
 });

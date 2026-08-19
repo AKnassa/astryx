@@ -73,6 +73,13 @@ export type ExtendedIconName = IconName | (string & {});
  */
 export type IconRegistry = Record<IconName, ReactNode>;
 
+/**
+ * Icon registry that also accepts extension keys (e.g. `'richtext:bold'`).
+ * Themes may override any {@link ExtendedIconName}, not just the built-in
+ * {@link IconName}s, so `defineTheme({icons})` is typed over this shape.
+ */
+export type ExtendedIconRegistry = Partial<Record<ExtendedIconName, ReactNode>>;
+
 export type IconRegistrySource = DefinedTheme | string | null | undefined;
 
 // =============================================================================
@@ -83,7 +90,7 @@ let globalRegistry: Record<string, ReactNode> = {};
 
 function getThemeIconOverrides(
   source: IconRegistrySource,
-): Partial<IconRegistry> | null {
+): ExtendedIconRegistry | null {
   if (source == null) {
     return null;
   }
@@ -176,9 +183,7 @@ export function getIcon(
 ): ReactNode {
   const themeIcons = getThemeIconOverrides(source);
   return (
-    themeIcons?.[name as IconName] ??
-    globalRegistry[name] ??
-    defaultIcons[name as IconName]
+    themeIcons?.[name] ?? globalRegistry[name] ?? defaultIcons[name as IconName]
   );
 }
 
@@ -205,7 +210,7 @@ export function getExtendedIcon(
 ): ReactNode {
   const themeIcons = getThemeIconOverrides(source);
   return (
-    themeIcons?.[name as IconName] ??
+    themeIcons?.[name] ??
     globalRegistry[name] ??
     defaultIcons[name as IconName] ??
     fallback
