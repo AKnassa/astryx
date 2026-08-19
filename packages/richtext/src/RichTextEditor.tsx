@@ -325,12 +325,15 @@ export interface RichTextEditorProps extends Omit<
   /** Placeholder text shown when the editor is empty. */
   placeholder?: string;
   /**
-   * Whether the editor is read-only (non-editable).
+   * Whether the editor is read-only (non-editable). The content stays
+   * keyboard-reachable at full opacity and is announced as read-only, so
+   * users can still read and copy it.
    * @default false
    */
   isReadOnly?: boolean;
   /**
-   * Whether the editor is disabled (non-editable, dimmed).
+   * Whether the editor is disabled (non-editable, dimmed, out of the tab
+   * order, announced as disabled).
    * @default false
    */
   isDisabled?: boolean;
@@ -593,7 +596,9 @@ export const RichTextEditor = forwardRef<
           stylex.props(
             inputWrapperStyles.base,
             styles.wrapper,
-            (isDisabled || isReadOnly) && inputWrapperStyles.disabled,
+            // Only disabled gets the dimmed treatment; a read-only editor
+            // keeps full-opacity text and stays keyboard-reachable.
+            isDisabled && inputWrapperStyles.disabled,
             isDisabled && styles.disabled,
             status && inputStatusBorderStyles[status.type],
             status &&
@@ -625,6 +630,8 @@ export const RichTextEditor = forwardRef<
                     ariaDescribedBy={ariaDescribedBy}
                     ariaRequired={isRequired && !isOptional}
                     ariaInvalid={status?.type === 'error'}
+                    isReadOnly={isReadOnly}
+                    isDisabled={isDisabled}
                     placeholderText={placeholder}
                     placeholderID={placeholderID}
                     minHeight={minHeight}
@@ -893,6 +900,8 @@ function EditorContentEditable({
   ariaDescribedBy,
   ariaRequired,
   ariaInvalid,
+  isReadOnly,
+  isDisabled,
   placeholderText,
   placeholderID,
   minHeight,
@@ -904,6 +913,8 @@ function EditorContentEditable({
   ariaDescribedBy?: string;
   ariaRequired: boolean;
   ariaInvalid: boolean;
+  isReadOnly: boolean;
+  isDisabled: boolean;
   placeholderText?: string;
   placeholderID: string;
   minHeight: SizeValue;
@@ -918,6 +929,14 @@ function EditorContentEditable({
     'aria-describedby': ariaDescribedBy,
     'aria-required': ariaRequired ? ('true' as const) : undefined,
     'aria-invalid': ariaInvalid ? ('true' as const) : undefined,
+    // Lexical announces every non-editable surface as aria-readonly and
+    // leaves it out of the tab order. Split the two states: read-only stays
+    // reachable (tabIndex 0) and announced read-only; disabled is announced
+    // disabled instead. These keys land after Lexical's computed attributes,
+    // so an explicit `undefined` removes the wrong announcement.
+    tabIndex: isReadOnly && !isDisabled ? 0 : undefined,
+    'aria-readonly': isReadOnly && !isDisabled ? ('true' as const) : undefined,
+    'aria-disabled': isDisabled ? ('true' as const) : undefined,
     ...stylex.props(
       styles.contentEditable,
       dynamicStyles.contentEditableMinHeight(minHeight),

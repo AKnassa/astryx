@@ -358,6 +358,39 @@ describe('RichTextEditor', () => {
     );
   });
 
+  it('keeps a read-only editor reachable and announced as read-only', () => {
+    render(<RichTextEditor label="Notes" isReadOnly />);
+    const textbox = screen.getByRole('textbox');
+    // A read-only textbox must stay in the tab order so keyboard and
+    // screen-reader users can reach, read, and copy its content.
+    expect(textbox).toHaveAttribute('tabindex', '0');
+    expect(textbox).toHaveAttribute('aria-readonly', 'true');
+    expect(textbox).not.toHaveAttribute('aria-disabled');
+  });
+
+  it('does not dim a read-only editor with the disabled treatment', () => {
+    const {container} = render(<RichTextEditor label="Notes" isReadOnly />);
+    const wrapper = container.querySelector('.astryx-rich-text-editor');
+    expect(wrapper).not.toBeNull();
+    expect(getComputedStyle(wrapper as Element).opacity).not.toBe('0.5');
+  });
+
+  it('announces a disabled editor as disabled, not read-only', () => {
+    render(<RichTextEditor label="Notes" isDisabled />);
+    const textbox = screen.getByRole('textbox');
+    expect(textbox).toHaveAttribute('aria-disabled', 'true');
+    expect(textbox).not.toHaveAttribute('aria-readonly');
+    // Disabled controls leave the tab order.
+    expect(textbox).not.toHaveAttribute('tabindex', '0');
+  });
+
+  it('keeps the dimmed treatment on a disabled editor', () => {
+    const {container} = render(<RichTextEditor label="Notes" isDisabled />);
+    const wrapper = container.querySelector('.astryx-rich-text-editor');
+    expect(wrapper).not.toBeNull();
+    expect(getComputedStyle(wrapper as Element).opacity).toBe('0.5');
+  });
+
   it('marks the textbox invalid on error status', () => {
     render(
       <RichTextEditor
