@@ -19,6 +19,7 @@ import {useEffect, useRef, useState, type ReactNode} from 'react';
 import * as stylex from '@stylexjs/stylex';
 import {sharedEditorTheme} from './editorTheme';
 import type {BaseProps} from '@astryxdesign/core';
+import {mergeProps} from '@astryxdesign/core/utils';
 
 import {
   LexicalComposer,
@@ -57,6 +58,13 @@ export interface RichTextViewProps extends BaseProps {
    * `JSON.stringify(editorState.toJSON())`).
    */
   value: string;
+  /**
+   * Accessible name for the read-only text surface. The view renders a
+   * `role="textbox"` element, and a textbox without a name fails
+   * axe's `aria-input-field-name`; pass a label describing the content
+   * (e.g. "Meeting notes").
+   */
+  label?: string;
   /**
    * Additional Lexical nodes to register beyond the default OSS set. Must match
    * the nodes used to author `value` so custom node types deserialize.
@@ -139,6 +147,7 @@ function SyncValuePlugin({value}: {value: string}): null {
  */
 export function RichTextView({
   value,
+  label,
   nodes,
   plugins,
   namespace = 'astryx-view',
@@ -184,9 +193,7 @@ export function RichTextView({
   if (hasError) {
     return (
       <div
-        {...stylex.props(styles.root, xstyle)}
-        className={className}
-        style={style}
+        {...mergeProps(stylex.props(styles.root, xstyle), className, style)}
         {...rest}>
         {errorFallback}
       </div>
@@ -206,14 +213,16 @@ export function RichTextView({
 
   return (
     <div
-      {...stylex.props(styles.root, xstyle)}
-      className={className}
-      style={style}
+      {...mergeProps(stylex.props(styles.root, xstyle), className, style)}
       {...rest}>
       <LexicalComposer initialConfig={initialConfig}>
         <SyncValuePlugin value={value} />
         <RichTextPlugin
-          contentEditable={<ContentEditable />}
+          contentEditable={
+            // A read-only textbox still needs a name and must stay in the tab
+            // order so keyboard and screen-reader users can reach and read it.
+            <ContentEditable ariaLabel={label} tabIndex={0} />
+          }
           placeholder={null}
           ErrorBoundary={LexicalErrorBoundary}
         />
