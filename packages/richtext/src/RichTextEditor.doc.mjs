@@ -57,13 +57,15 @@ export const docs = {
     {
       name: 'isReadOnly',
       type: 'boolean',
-      description: 'Whether the editor is read-only (non-editable).',
+      description:
+        'Whether the editor is read-only (non-editable). Content stays keyboard-reachable at full opacity and is announced as read-only.',
       default: 'false',
     },
     {
       name: 'isDisabled',
       type: 'boolean',
-      description: 'Whether the editor is disabled (non-editable, dimmed).',
+      description:
+        'Whether the editor is disabled: non-editable, dimmed, out of the tab order, and announced as disabled.',
       default: 'false',
     },
     {
@@ -157,7 +159,13 @@ export const docs = {
     },
   ],
   theming: {
-    targets: [{className: 'astryx-rich-text-editor', visualProps: []}],
+    targets: [
+      {
+        className: 'astryx-rich-text-editor',
+        visualProps: ['size'],
+        states: ['status'],
+      },
+    ],
   },
   usage: {
     description:
@@ -196,7 +204,7 @@ export const docs = {
       {
         guidance: true,
         description:
-          'Links: the toolbar Link button (on by default; disable with hasLink={false}) and Cmd/Ctrl+K open an Astryx Dialog. The form preserves the Lexical selection while focus moves into the URL input and supports add, update, remove, Escape, and focus return. Pass promptForUrl only when integrating an existing synchronous URL flow. Entered URLs are sanitized (only http/https/mailto/tel are written; javascript:/data: are rejected). Links open in a new tab by default: target=_blank and rel=noopener noreferrer are written into the link node data; set linkOpensInNewTab={false} for same-tab links.',
+          'Links: the toolbar Link button (on by default; disable with hasLink={false}) and Cmd/Ctrl+K open an Astryx Dialog. The form preserves the Lexical selection while focus moves into the URL input and supports add, update, remove, Escape, and focus return. Pass promptForUrl only when integrating an existing synchronous URL flow. Entered URLs are sanitized (only http/https/mailto/tel are written; javascript:/data: are rejected). Links open in a new tab by default: target=_blank and rel=noopener noreferrer are written into the link node data; set hasNewTabLinks={false} for same-tab links.',
       },
       {
         guidance: true,

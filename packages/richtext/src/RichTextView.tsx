@@ -15,7 +15,7 @@
  * - /apps/storybook/stories/RichTextEditor.stories.tsx
  */
 
-import {useEffect, useRef, useState, type ReactNode} from 'react';
+import {useEffect, useRef, useState, type ReactNode, type Ref} from 'react';
 import * as stylex from '@stylexjs/stylex';
 import {sharedEditorTheme} from './editorTheme';
 import type {BaseProps} from '@astryxdesign/core';
@@ -92,6 +92,8 @@ export interface RichTextViewProps extends BaseProps {
    * @default null
    */
   errorFallback?: ReactNode;
+  /** Ref to the view's root element. */
+  ref?: Ref<HTMLDivElement>;
 }
 
 /**
@@ -124,10 +126,10 @@ export interface RichTextViewProps extends BaseProps {
  */
 function SyncValuePlugin({value}: {value: string}): null {
   const [editor] = useLexicalComposerContext();
-  const isFirstRun = useRef(true);
+  const isFirstRunRef = useRef(true);
   useEffect(() => {
-    if (isFirstRun.current) {
-      isFirstRun.current = false;
+    if (isFirstRunRef.current) {
+      isFirstRunRef.current = false;
       return;
     }
     editor.setEditorState(editor.parseEditorState(value));

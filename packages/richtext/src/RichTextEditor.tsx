@@ -32,7 +32,6 @@ import {
   useMemo,
   useRef,
   useState,
-  forwardRef,
   type ReactNode,
   type Ref,
 } from 'react';
@@ -432,6 +431,11 @@ export interface RichTextEditorProps extends Omit<
    * @default 'astryx-editor'
    */
   namespace?: string;
+  /**
+   * Imperative handle exposing `focus()`, `clear()`, serialization helpers,
+   * and the underlying Lexical editor. See {@link RichTextEditorRef}.
+   */
+  ref?: Ref<RichTextEditorRef>;
 }
 
 /**
@@ -444,7 +448,8 @@ export interface RichTextEditorProps extends Omit<
  * and `plugins` to layer richer behaviour (formatting, mentions, hover cards)
  * on top without forking.
  *
- * The forwarded `RichTextEditorRef` exposes imperative `focus()` and `clear()`
+ * The `RichTextEditorRef` handle (via the `ref` prop) exposes imperative
+ * `focus()` and `clear()`
  * methods for callers that manage the editor from outside.
  *
  * @example
@@ -459,43 +464,38 @@ export interface RichTextEditorProps extends Omit<
  * />
  * ```
  */
-export const RichTextEditor = forwardRef<
-  RichTextEditorRef,
-  RichTextEditorProps
->(function RichTextEditor(
-  {
-    label,
-    isLabelHidden = false,
-    description,
-    isOptional = false,
-    isRequired = false,
-    defaultValue,
-    onChange,
-    placeholder,
-    isReadOnly = false,
-    isDisabled = false,
-    status,
-    statusVariant = 'attached',
-    width,
-    minHeight = '4.5rem',
-    labelTooltip,
-    size: sizeProp,
-    nodes,
-    toolbar,
-    plugins,
-    hasMarkdownShortcuts = true,
-    transformers = TRANSFORMERS,
-    hasAutoFocus = false,
-    tabEscapeHint,
-    maxLength,
-    namespace = 'astryx-editor',
-    xstyle,
-    className,
-    style,
-    ...rest
-  }: RichTextEditorProps,
-  ref: Ref<RichTextEditorRef>,
-) {
+export function RichTextEditor({
+  label,
+  isLabelHidden = false,
+  description,
+  isOptional = false,
+  isRequired = false,
+  defaultValue,
+  onChange,
+  placeholder,
+  isReadOnly = false,
+  isDisabled = false,
+  status,
+  statusVariant = 'attached',
+  width,
+  minHeight = '4.5rem',
+  labelTooltip,
+  size: sizeProp,
+  nodes,
+  toolbar,
+  plugins,
+  hasMarkdownShortcuts = true,
+  transformers = TRANSFORMERS,
+  hasAutoFocus = false,
+  tabEscapeHint,
+  maxLength,
+  namespace = 'astryx-editor',
+  xstyle,
+  className,
+  style,
+  ref,
+  ...rest
+}: RichTextEditorProps) {
   const t = useTranslator();
   const size = useSize(sizeProp, 'md');
   const inputID = useId();
@@ -660,7 +660,7 @@ export const RichTextEditor = forwardRef<
                 editable={editable}
                 transformers={markdownTransformers}
               />
-              {maxLength != null && (
+              {typeof maxLength === 'number' && (
                 <CharCountPlugin onCountChange={setCharCount} />
               )}
             </div>
@@ -675,7 +675,7 @@ export const RichTextEditor = forwardRef<
           </VisuallyHidden>
         )}
       </div>
-      {maxLength != null && (
+      {typeof maxLength === 'number' && (
         <div
           id={counterID}
           {...stylex.props(
@@ -698,7 +698,7 @@ export const RichTextEditor = forwardRef<
       )}
     </Field>
   );
-});
+}
 
 RichTextEditor.displayName = 'RichTextEditor';
 
@@ -815,9 +815,9 @@ function EditorRefBridge({
   editable,
   transformers,
 }: {
-  editorRef: Ref<RichTextEditorRef>;
+  editorRef: Ref<RichTextEditorRef> | undefined;
   editable: boolean;
-  transformers: Array<Transformer>;
+  transformers: Transformer[];
 }): null {
   const [editor] = useLexicalComposerContext();
   useImperativeHandle(

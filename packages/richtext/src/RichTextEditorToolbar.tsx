@@ -27,10 +27,11 @@
  *
  * ICONS: Each control resolves its glyph through the core icon registry under a
  * stable `richtext:*` key (see {@link RICHTEXT_ICON_KEYS}), falling back to the
- * bundled inline SVGs below. A theme can restyle any glyph by registering its
+ * bundled inline SVGs below. A theme can restyle any glyph by declaring its
  * own icon for that key — no need to fork the toolbar:
- *   import {registerIcons} from '@astryxdesign/core/Icon';
- *   registerIcons({'richtext:bold': <MyBoldIcon />});
+ *   defineTheme({icons: {'richtext:bold': <MyBoldIcon />}});
+ * (The global `registerIcons()` escape hatch also works but applies to every
+ * theme and warns in dev.)
  */
 
 import {
@@ -40,6 +41,7 @@ import {
   useState,
   type FormEvent,
   type ReactNode,
+  type Ref,
 } from 'react';
 import * as stylex from '@stylexjs/stylex';
 import {useLexicalComposerContext} from '@lexical/react/LexicalComposerContext';
@@ -49,7 +51,6 @@ import {
   $createQuoteNode,
   $isHeadingNode,
   $isQuoteNode,
-  type HeadingTagType,
 } from '@lexical/rich-text';
 import {
   $isListNode,
@@ -75,9 +76,10 @@ import {
   LayoutFooter,
 } from '@astryxdesign/core/Layout';
 import {getExtendedIcon} from '@astryxdesign/core/Icon';
+import type {BaseProps} from '@astryxdesign/core';
 import {useTranslator} from '@astryxdesign/core/i18n';
 import {useThemeName} from '@astryxdesign/core/theme';
-import {rtlStyles} from '@astryxdesign/core/utils';
+import {isRenderable, rtlStyles} from '@astryxdesign/core/utils';
 import {
   typeScaleVars,
   fontWeightVars,
@@ -102,6 +104,12 @@ import {
   type RangeSelection,
 } from 'lexical';
 import {sanitizeUrl} from './linkUtils';
+
+const DEFAULT_HEADING_LEVELS: ReadonlyArray<'h1' | 'h2' | 'h3'> = [
+  'h1',
+  'h2',
+  'h3',
+];
 
 /** Block types exposed by the toolbar's format selector. */
 type BlockType =
@@ -178,9 +186,9 @@ function isInsertLink(event: KeyboardEvent): boolean {
 
 /**
  * Stable icon-registry keys for the toolbar's controls. Themes can override any
- * of these via `registerIcons({'richtext:bold': <MyIcon />})` from
- * `@astryxdesign/core/Icon`. Keys are namespaced (`richtext:*`) to avoid
- * collisions with the core semantic icon set.
+ * of these via `defineTheme({icons: {'richtext:bold': <MyIcon />}})` (or the
+ * global `registerIcons()` escape hatch). Keys are namespaced (`richtext:*`)
+ * to avoid collisions with the core semantic icon set.
  */
 export const RICHTEXT_ICON_KEYS = {
   bold: 'richtext:bold',
@@ -444,7 +452,7 @@ const mirrorGlyphStyles = stylex.create({
   },
 });
 
-export interface RichTextEditorToolbarProps {
+export interface RichTextEditorToolbarProps extends BaseProps {
   /**
    * Accessible label for the toolbar element. Defaults to the localized
    * "Text formatting".
@@ -488,13 +496,15 @@ export interface RichTextEditorToolbarProps {
    * create same-tab links.
    * @default true
    */
-  linkOpensInNewTab?: boolean;
+  hasNewTabLinks?: boolean;
   /**
    * Extra items rendered at the end of the toolbar (after a divider). Use this
    * to compose product-specific controls (e.g. mentions, AI) alongside the
    * default formatting buttons.
    */
   endContent?: ReactNode;
+  /** Ref to the toolbar's root element. */
+  ref?: Ref<HTMLDivElement>;
 }
 
 /**
@@ -519,12 +529,13 @@ export interface RichTextEditorToolbarProps {
  */
 export function RichTextEditorToolbar({
   label,
-  headingLevels = ['h1', 'h2', 'h3'],
+  headingLevels = DEFAULT_HEADING_LEVELS,
   size = 'sm',
   hasLink = true,
   promptForUrl,
-  linkOpensInNewTab = true,
+  hasNewTabLinks = true,
   endContent,
+  ...rest
 }: RichTextEditorToolbarProps) {
   const t = useTranslator();
   const toolbarLabel = label ?? t('@astryx.richTextEditor.toolbarLabel');
@@ -659,7 +670,7 @@ export function RichTextEditorToolbar({
       }
 
       restoreLinkSelection();
-      const linkAttributes = linkOpensInNewTab
+      const linkAttributes = hasNewTabLinks
         ? {target: '_blank', rel: 'noopener noreferrer'}
         : {};
       const handled = editor.dispatchCommand(TOGGLE_LINK_COMMAND, {
@@ -678,7 +689,7 @@ export function RichTextEditorToolbar({
       }
       return true;
     },
-    [editor, linkOpensInNewTab, restoreLinkSelection],
+    [editor, hasNewTabLinks, restoreLinkSelection],
   );
 
   const toggleLink = useCallback(() => {
@@ -806,11 +817,7 @@ export function RichTextEditorToolbar({
   const toggleInlineFormat = (format: InlineFormat) => {
     // FORMAT_TEXT_COMMAND payload is a TextFormatType; the values we pass are
     // all valid members.
-    editor.dispatchCommand(
-      FORMAT_TEXT_COMMAND,
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      format as any,
-    );
+    editor.dispatchCommand(FORMAT_TEXT_COMMAND, format);
   };
 
   const setBlock = (next: BlockType) => {
@@ -837,7 +844,7 @@ export function RichTextEditorToolbar({
           return $createQuoteNode();
         }
         if (next === 'h1' || next === 'h2' || next === 'h3') {
-          return $createHeadingNode(next as HeadingTagType);
+          return $createHeadingNode(next);
         }
         return $createParagraphNode();
       });
@@ -875,6 +882,7 @@ export function RichTextEditorToolbar({
   return (
     <>
       <Toolbar
+        {...rest}
         label={toolbarLabel}
         size={size}
         startContent={
@@ -962,7 +970,7 @@ export function RichTextEditorToolbar({
                 onPressedChange={toggleLink}
               />
             )}
-            {endContent != null && (
+            {isRenderable(endContent) && (
               <>
                 <Divider orientation="vertical" />
                 {endContent}

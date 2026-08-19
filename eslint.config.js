@@ -147,11 +147,14 @@ export default defineConfig(
       ],
     },
   },
-  // Type-aware linting for core. Keep this scoped: projectService has a
-  // measurable startup cost, but catches async correctness issues syntax-only
-  // lint cannot see.
+  // Type-aware linting for core and richtext. Keep this scoped: projectService
+  // has a measurable startup cost, but catches async correctness issues
+  // syntax-only lint cannot see.
   {
-    files: ["packages/core/src/**/*.{ts,tsx}"],
+    files: [
+      "packages/core/src/**/*.{ts,tsx}",
+      "packages/richtext/src/**/*.{ts,tsx}",
+    ],
     languageOptions: {
       parserOptions: {
         projectService: true,
@@ -202,9 +205,13 @@ export default defineConfig(
       '@astryx/copyright-header': 'error',
     },
   },
-  // Astryx design token enforcement - applies to core package (excluding theme files)
+  // Astryx design token enforcement - applies to the core and richtext
+  // packages (excluding core's theme files)
   {
-    files: ["packages/core/src/**/*.{ts,tsx}"],
+    files: [
+      "packages/core/src/**/*.{ts,tsx}",
+      "packages/richtext/src/**/*.{ts,tsx}",
+    ],
     ignores: ["packages/core/src/theme/**"],
     ...astryxConfig,
     rules: {
@@ -232,11 +239,14 @@ export default defineConfig(
       '@astryx/no-hardcoded-i18n-string': 'off',
     },
   },
-  // React bug-prevention rules - applies to core package
+  // React bug-prevention rules - applies to the core and richtext packages
   // Uses @eslint-react for bugs that TypeScript alone cannot catch.
   // Children.*/cloneElement are already covered by @astryx/no-react-introspection.
   {
-    files: ["packages/core/src/**/*.{ts,tsx}"],
+    files: [
+      "packages/core/src/**/*.{ts,tsx}",
+      "packages/richtext/src/**/*.{ts,tsx}",
+    ],
     plugins: {
       ...eslintReact.configs.recommended.plugins,
       'react-compiler': reactCompiler,

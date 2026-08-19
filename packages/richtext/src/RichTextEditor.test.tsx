@@ -1655,7 +1655,7 @@ describe('RichTextEditorToolbar — new-tab links', () => {
     });
   });
 
-  it('omits new-tab attributes when linkOpensInNewTab is false', async () => {
+  it('omits new-tab attributes when hasNewTabLinks is false', async () => {
     let editor!: LexicalEditor;
     const promptForUrl = vi.fn(() => 'example.com');
     render(
@@ -1664,7 +1664,7 @@ describe('RichTextEditorToolbar — new-tab links', () => {
         toolbar={
           <RichTextEditorToolbar
             promptForUrl={promptForUrl}
-            linkOpensInNewTab={false}
+            hasNewTabLinks={false}
           />
         }
         plugins={<CaptureEditor onReady={e => (editor = e)} />}
