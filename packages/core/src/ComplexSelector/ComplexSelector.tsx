@@ -35,6 +35,7 @@ import {useTranslator} from '../i18n';
 import {layerAnimations} from '../Layer/layerAnimations.stylex';
 import type {LayerAlignment, LayerPlacement} from '../Layer/useLayer';
 import {usePopover} from '../Popover/usePopover';
+import {useResolvedRequired} from '../hooks/useResolvedRequired';
 import {
   colorVars,
   durationVars,
@@ -110,16 +111,17 @@ const styles = stylex.create({
     backgroundColor: 'transparent',
     backgroundImage: {
       default: null,
-      ':hover': {
+      ':hover:where(:not(:disabled,[aria-disabled="true"]))': {
         '@media (hover: hover)': `linear-gradient(${colorVars['--color-overlay-hover']}, ${colorVars['--color-overlay-hover']})`,
       },
       ':active': `linear-gradient(${colorVars['--color-overlay-pressed']}, ${colorVars['--color-overlay-pressed']})`,
     },
     boxShadow: {
       default: 'none',
-      ':hover:not(:focus-within)': {
-        '@media (hover: hover)': 'none',
-      },
+      ':hover:not(:focus-within):where(:not(:disabled,[aria-disabled="true"]))':
+        {
+          '@media (hover: hover)': 'none',
+        },
       ':focus-within': 'none',
     },
     fontWeight: fontWeightVars['--font-weight-medium'],
@@ -344,6 +346,7 @@ export function ComplexSelector<Value>({
   ...props
 }: ComplexSelectorProps<Value>) {
   const t = useTranslator();
+  const isEffectivelyRequired = useResolvedRequired({isRequired, isOptional});
   const placeholder = placeholderFromProps ?? t('@astryx.selector.placeholder');
   const effectiveStatusVariant =
     variant === 'ghost' && statusVariant === 'attached'
@@ -497,7 +500,7 @@ export function ComplexSelector<Value>({
           aria-controls={contentId}
           aria-describedby={ariaDescribedBy}
           aria-labelledby={labelId}
-          aria-required={isRequired ? 'true' : undefined}
+          aria-required={isEffectivelyRequired ? 'true' : undefined}
           aria-invalid={status?.type === 'error' ? 'true' : undefined}
           aria-busy={isBusy || undefined}
           disabled={isDisabled}
