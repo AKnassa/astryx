@@ -95,6 +95,26 @@ export type IconRegistrySource = DefinedTheme | string | null | undefined;
 
 let globalRegistry: Record<string, ReactNode> = {};
 
+/**
+ * Own-property icon lookup. Names reach this module as plain strings —
+ * extension keys, theme JSON, tooling — so a bare `registry[name]` would
+ * resolve inherited `Object.prototype` members: `getIcon('constructor')`
+ * would hand back the `Object` constructor, and the icon slot would then try
+ * to render that function as a component.
+ */
+function ownIcon(
+  registry: Record<string, ReactNode> | ExtendedIconRegistry | null | undefined,
+  name: string,
+): ReactNode {
+  if (
+    registry == null ||
+    !Object.prototype.hasOwnProperty.call(registry, name)
+  ) {
+    return undefined;
+  }
+  return (registry as Record<string, ReactNode>)[name];
+}
+
 function getThemeIconOverrides(
   source: IconRegistrySource,
 ): ExtendedIconRegistry | null {
@@ -160,7 +180,7 @@ export function getIconRegistry(
   // libraries are resolved via getIcon/getExtendedIcon and intentionally kept
   // out of the typed IconRegistry snapshot.
   for (const name of Object.keys(defaultIcons) as IconName[]) {
-    registry[name] = globalRegistry[name] ?? defaultIcons[name];
+    registry[name] = ownIcon(globalRegistry, name) ?? defaultIcons[name];
   }
 
   const themeIcons = getThemeIconOverrides(source);
@@ -168,7 +188,9 @@ export function getIconRegistry(
     for (const name of Object.keys(themeIcons) as IconName[]) {
       // Theme registries may carry extension keys (e.g. 'richtext:bold');
       // per the contract above, only built-in names enter the typed snapshot.
-      if (!(name in defaultIcons)) {
+      // Own-property check, not `in`: `in` walks the prototype chain, so a
+      // key like 'toString' would pass and poison the snapshot.
+      if (!Object.prototype.hasOwnProperty.call(defaultIcons, name)) {
         continue;
       }
       registry[name] = themeIcons[name] ?? registry[name];
@@ -195,9 +217,9 @@ export function getIcon(
 ): ReactNode {
   const themeIcons = getThemeIconOverrides(source);
   return (
-    themeIcons?.[name as IconName] ??
-    globalRegistry[name] ??
-    defaultIcons[name as IconName]
+    ownIcon(themeIcons, name) ??
+    ownIcon(globalRegistry, name) ??
+    ownIcon(defaultIcons, name)
   );
 }
 
@@ -224,9 +246,9 @@ export function getExtendedIcon(
 ): ReactNode {
   const themeIcons = getThemeIconOverrides(source);
   return (
-    themeIcons?.[name as IconName] ??
-    globalRegistry[name] ??
-    defaultIcons[name as IconName] ??
+    ownIcon(themeIcons, name) ??
+    ownIcon(globalRegistry, name) ??
+    ownIcon(defaultIcons, name) ??
     fallback
   );
 }

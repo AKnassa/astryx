@@ -2142,3 +2142,245 @@ describe('imperative ref across editable prop toggles', () => {
     });
   });
 });
+
+describe('aria-describedby composition', () => {
+  // Reads every id the textbox points at and proves each one resolves.
+  function describedByIDs(): string[] {
+    return (screen.getByRole('textbox').getAttribute('aria-describedby') ?? '')
+      .split(/\s+/)
+      .filter(Boolean);
+  }
+
+  it('leaves no dangling id when maxLength is not a number', () => {
+    // The counter renders under `typeof maxLength === 'number'`; the id list
+    // must use the same guard, or it references an element that never mounts.
+    render(
+      <RichTextEditor label="Notes" maxLength={'100' as unknown as number} />,
+    );
+    expect(screen.queryByText(/\d+\/\d+/)).not.toBeInTheDocument();
+    const ids = describedByIDs();
+    expect(ids.length).toBeGreaterThan(0);
+    for (const id of ids) {
+      expect(document.getElementById(id), `dangling id: ${id}`).not.toBeNull();
+    }
+  });
+
+  it('merges a consumer aria-describedby with the computed ids', async () => {
+    render(
+      <RichTextEditor
+        label="Notes"
+        placeholder="Write…"
+        maxLength={100}
+        aria-describedby="host-help"
+      />,
+    );
+    const counter = await screen.findByText('0/100');
+    const ids = describedByIDs();
+    // The consumer's description is additive — it must not silently strip the
+    // editor's own placeholder, counter and tab-escape descriptions.
+    expect(ids).toContain('host-help');
+    expect(ids).toContain(counter.id);
+    expect(ids).toContain(screen.getByText('Write…').id);
+    expect(ids).toContain(
+      screen.getByText('Press Escape then Tab to move focus out of the editor.')
+        .id,
+    );
+  });
+
+  it('forwards rest props through to the textbox', () => {
+    render(
+      <RichTextEditor
+        label="Notes"
+        {...({'data-testid': 'editor-surface'} as Record<string, string>)}
+      />,
+    );
+    expect(screen.getByTestId('editor-surface')).toBe(
+      screen.getByRole('textbox'),
+    );
+  });
+
+  it('does not let a consumer prop clobber the textbox semantics', () => {
+    render(
+      <RichTextEditor
+        label="Notes"
+        {...({role: 'presentation', 'aria-multiline': 'false'} as Record<
+          string,
+          string
+        >)}
+      />,
+    );
+    const textbox = screen.getByRole('textbox');
+    expect(textbox).toHaveAttribute('aria-multiline', 'true');
+  });
+});
+
+describe('maxLength boundaries', () => {
+  it('renders and announces the counter at maxLength={0}', async () => {
+    // The falsy boundary the `typeof maxLength === 'number'` guard exists to
+    // preserve: 0 is a real limit, not "no limit".
+    render(<RichTextEditor label="Notes" maxLength={0} />);
+    const counter = await screen.findByText('0/0');
+    expect(screen.getByText('0 characters remaining')).toBeInTheDocument();
+    const ids = (
+      screen.getByRole('textbox').getAttribute('aria-describedby') ?? ''
+    ).split(/\s+/);
+    expect(ids).toContain(counter.id);
+  });
+
+  it('counts characters, not UTF-16 code units', async () => {
+    // Three thumbs-up are three characters and six code units. TextArea's
+    // counter uses `characterCount` for exactly this reason; the editor's
+    // must agree, or an emoji silently eats two of the user's budget.
+    render(
+      <RichTextEditor
+        label="Notes"
+        defaultValue={makeParagraphState('\u{1F44D}'.repeat(3))}
+        maxLength={5}
+      />,
+    );
+    expect(await screen.findByText('3/5')).toBeInTheDocument();
+    expect(screen.queryByText(/over limit/)).not.toBeInTheDocument();
+  });
+
+  it('counts a ZWJ emoji sequence as one character', async () => {
+    // The family emoji is 11 code units but one grapheme.
+    render(
+      <RichTextEditor
+        label="Notes"
+        defaultValue={makeParagraphState(
+          ['\u{1F468}', '\u{1F469}', '\u{1F467}', '\u{1F466}'].join('\u200D'),
+        )}
+        maxLength={5}
+      />,
+    );
+    expect(await screen.findByText('1/5')).toBeInTheDocument();
+  });
+
+  it('follows live text edits and clears a stale announcement', async () => {
+    let editor: LexicalEditor | undefined;
+    render(
+      <RichTextEditor
+        label="Notes"
+        defaultValue={HELLO_STATE}
+        maxLength={5}
+        plugins={<CaptureEditor onReady={e => (editor = e)} />}
+      />,
+    );
+    await waitFor(() => expect(screen.getByText('11/5')).toBeInTheDocument());
+    expect(screen.getByText('6 characters over limit')).toBeInTheDocument();
+
+    // Drive a real edit so the registerTextContentListener path runs, not
+    // just the mount-time seed.
+    act(() => {
+      editor!.update(() => {
+        const root = $getRoot();
+        root.clear();
+        const paragraph = $createParagraphNode();
+        paragraph.append($createTextNode('hi'));
+        root.append(paragraph);
+      });
+    });
+
+    await waitFor(() => expect(screen.getByText('2/5')).toBeInTheDocument());
+    // Back under the warning threshold, so the stale overflow announcement
+    // must be gone rather than left sitting in the live region.
+    expect(
+      screen.queryByText('6 characters over limit'),
+    ).not.toBeInTheDocument();
+  });
+});
+
+describe('read-only keyboard traversal (WCAG 2.1.2)', () => {
+  it('lets Tab leave a read-only editor without the Escape dance', async () => {
+    const user = userEvent.setup();
+    render(
+      <>
+        <button type="button">before</button>
+        <RichTextEditor label="Notes" isReadOnly />
+        <button type="button">after</button>
+      </>,
+    );
+
+    screen.getByRole('button', {name: 'before'}).focus();
+    await user.tab();
+    expect(document.activeElement).toBe(screen.getByRole('textbox'));
+
+    // A non-editable editor renders no tab-escape hint, so there must be no
+    // trap to escape: a bare Tab has to move on, with no Escape first.
+    await user.tab();
+    expect(document.activeElement).toBe(
+      screen.getByRole('button', {name: 'after'}),
+    );
+  });
+
+  it('skips a disabled editor entirely', async () => {
+    const user = userEvent.setup();
+    render(
+      <>
+        <button type="button">before</button>
+        <RichTextEditor label="Notes" isDisabled />
+        <button type="button">after</button>
+      </>,
+    );
+    screen.getByRole('button', {name: 'before'}).focus();
+    await user.tab();
+    expect(document.activeElement).toBe(
+      screen.getByRole('button', {name: 'after'}),
+    );
+  });
+});
+
+describe('toolbar follows the editable props after mount', () => {
+  // Lexical freezes initialConfig.editable at composer init, so without the
+  // editor.setEditable sync the toolbar would stay stuck at its mount state
+  // while the wrapper styling and ARIA followed the props.
+  it('re-enables and re-disables the formatting controls on rerender', () => {
+    const {rerender} = render(
+      <RichTextEditor
+        label="Notes"
+        isDisabled
+        toolbar={<RichTextEditorToolbar />}
+      />,
+    );
+    expect(screen.getByRole('button', {name: 'Bold'})).toBeDisabled();
+
+    rerender(
+      <RichTextEditor label="Notes" toolbar={<RichTextEditorToolbar />} />,
+    );
+    expect(screen.getByRole('button', {name: 'Bold'})).toBeEnabled();
+
+    rerender(
+      <RichTextEditor
+        label="Notes"
+        isReadOnly
+        toolbar={<RichTextEditorToolbar />}
+      />,
+    );
+    expect(screen.getByRole('button', {name: 'Bold'})).toBeDisabled();
+  });
+});
+
+describe('tabEscapeHint suppressed from the catalog', () => {
+  it('renders no hint and leaves no dangling id for an empty catalog string', () => {
+    render(
+      <InternationalizationProvider
+        locale="en"
+        overrides={{en: {'@astryx.richTextEditor.tabEscapeHint': ''}}}>
+        <RichTextEditor label="Notes" placeholder="Write…" />
+      </InternationalizationProvider>,
+    );
+    expect(
+      screen.queryByText(
+        'Press Escape then Tab to move focus out of the editor.',
+      ),
+    ).not.toBeInTheDocument();
+    const ids = (
+      screen.getByRole('textbox').getAttribute('aria-describedby') ?? ''
+    )
+      .split(/\s+/)
+      .filter(Boolean);
+    for (const id of ids) {
+      expect(document.getElementById(id), `dangling id: ${id}`).not.toBeNull();
+    }
+  });
+});

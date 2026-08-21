@@ -5,8 +5,8 @@
 /**
  * @file RichTextEditor.tsx
  * @input Uses React, useId, Lexical (lexical + @lexical/react), Field,
- *   VisuallyHidden, useInputStatusIcon, mergeProps/themeProps, useTranslator
- *   (i18n), design tokens
+ *   VisuallyHidden, useInputStatusIcon, characterCount, mergeProps/themeProps,
+ *   useTranslator (i18n), design tokens
  * @output Exports an accessibly labelled RichTextEditor component with a flush
  *   top toolbar slot and configurable editable-surface minimum height, RichTextEditorProps,
  *   RichTextEditorStatus, RichTextEditorStatusType, RichTextEditorSize
@@ -55,7 +55,12 @@ import {
 import type {BaseProps} from '@astryxdesign/core';
 import {useInputStatusIcon} from '@astryxdesign/core/hooks';
 import {VisuallyHidden} from '@astryxdesign/core/VisuallyHidden';
-import {mergeProps, themeProps, type SizeValue} from '@astryxdesign/core/utils';
+import {
+  characterCount,
+  mergeProps,
+  themeProps,
+  type SizeValue,
+} from '@astryxdesign/core/utils';
 import {useSize} from '@astryxdesign/core/SizeContext';
 import {useTranslator} from '@astryxdesign/core/i18n';
 
@@ -556,7 +561,9 @@ export function RichTextEditor({
       // tooltip layer so assistive technology still receives the message.
       statusTooltipDescribedBy,
       placeholder ? placeholderID : null,
-      maxLength != null ? counterID : null,
+      // Must match the two render guards below: a non-number maxLength
+      // renders no counter, so referencing its id would dangle.
+      typeof maxLength === 'number' ? counterID : null,
       hasTabEscapeHint ? tabEscapeHintID : null,
     ]
       .filter(Boolean)
@@ -893,9 +900,11 @@ function CharCountPlugin({
     // build it forces Babel to transpile lexical's raw `src/*.ts` (which uses
     // `declare` class fields) and fails. Both APIs used here are methods on the
     // editor instance, so no top-level `lexical` value import is needed.
-    onCountChange(editor.getRootElement()?.textContent?.length ?? 0);
+    // Counted in characters, not UTF-16 code units, so one emoji counts as
+    // one — the same `characterCount` TextArea's counter uses.
+    onCountChange(characterCount(editor.getRootElement()?.textContent ?? ''));
     return editor.registerTextContentListener(textContent => {
-      onCountChange(textContent.length);
+      onCountChange(characterCount(textContent));
     });
   }, [editor, onCountChange]);
   return null;
@@ -933,13 +942,28 @@ function EditorContentEditable({
   minHeight: SizeValue;
   rest: Record<string, unknown>;
 }) {
+  // A consumer's own `aria-describedby` must ADD to the ids this component
+  // computes (status, placeholder, counter, tab-escape hint), never replace
+  // them — a bare override silently strips the editor's own description.
+  const consumerDescribedBy = rest['aria-describedby'];
+  const mergedDescribedBy =
+    [
+      ariaDescribedBy,
+      typeof consumerDescribedBy === 'string' ? consumerDescribedBy : null,
+    ]
+      .filter(Boolean)
+      .join(' ') || undefined;
+
+  // `rest` leads the object so no consumer prop can clobber the textbox's own
+  // semantics (id, role, aria-multiline, the read-only/disabled split).
   const shared = {
+    ...rest,
     id,
     role: 'textbox' as const,
     'aria-multiline': 'true' as const,
     'aria-label': ariaLabel,
     'aria-labelledby': ariaLabelledBy,
-    'aria-describedby': ariaDescribedBy,
+    'aria-describedby': mergedDescribedBy,
     'aria-required': ariaRequired ? ('true' as const) : undefined,
     'aria-invalid': ariaInvalid ? ('true' as const) : undefined,
     // Lexical announces every non-editable surface as aria-readonly and
@@ -959,7 +983,6 @@ function EditorContentEditable({
       styles.contentEditable,
       dynamicStyles.contentEditableMinHeight(minHeight),
     ),
-    ...rest,
   };
   if (placeholderText) {
     return (

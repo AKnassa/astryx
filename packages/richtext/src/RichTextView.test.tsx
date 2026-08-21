@@ -4,17 +4,20 @@
  * @file RichTextView.test.tsx
  * @input Uses vitest, @testing-library/react, RichTextView
  * @output Unit tests for the read-only view's accessible name (including
- *   label changes after mount), keyboard reachability, className/xstyle
- *   merging on the root element, and the root ref in both render branches
+ *   label changes after mount and the blank-label guard), keyboard
+ *   reachability, className/xstyle merging and rest props on the root element,
+ *   the root ref in both render branches, and the fallback for a value that
+ *   parses as JSON but is not a usable editor state
  * @position Testing; validates RichTextView.tsx
  *
  * SYNC: When the view component changes, update these tests to match.
  */
 
-import {describe, it, expect} from 'vitest';
+import {describe, it, expect, vi, beforeEach, afterEach} from 'vitest';
 import {render, screen, waitFor} from '@testing-library/react';
 import {createRef} from 'react';
 import * as stylex from '@stylexjs/stylex';
+import {__resetDevWarnings} from '@astryxdesign/core/utils';
 import {RichTextView} from './RichTextView';
 
 // A minimal valid serialized Lexical editor state containing a single
@@ -217,5 +220,148 @@ describe('RichTextView root ref', () => {
     expect(ref.current).not.toBeNull();
     expect(ref.current).toBe(container.firstElementChild);
     expect(ref.current).toContainElement(screen.getByTestId('view-fallback'));
+  });
+});
+
+describe('RichTextView label guard', () => {
+  beforeEach(() => {
+    // warnOnce dedupes per key for the process lifetime, so every test that
+    // asserts on the warning has to start from a clean slate.
+    __resetDevWarnings();
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it.each([
+    ['omitted', undefined],
+    ['an empty string', ''],
+    ['whitespace only', '   '],
+  ])('warns and emits no aria-label when the label is %s', async (_, label) => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    render(<RichTextView value={HELLO_STATE} label={label} />);
+    await waitFor(() =>
+      expect(screen.getByText('Hello world')).toBeInTheDocument(),
+    );
+
+    // A blank label names nothing — `aria-label=""` resolves to the same
+    // empty accessible name as no attribute at all — so it must not be able
+    // to silence the guard the prop exists to enforce.
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('RichTextView:'));
+    expect(screen.getByRole('textbox')).not.toHaveAttribute('aria-label');
+  });
+
+  it('stays silent when a real label is supplied', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    render(<RichTextView value={HELLO_STATE} label="Meeting notes" />);
+    await waitFor(() =>
+      expect(screen.getByText('Hello world')).toBeInTheDocument(),
+    );
+    expect(warn).not.toHaveBeenCalledWith(
+      expect.stringContaining('RichTextView:'),
+    );
+    expect(screen.getByRole('textbox')).toHaveAttribute(
+      'aria-label',
+      'Meeting notes',
+    );
+  });
+});
+
+describe('RichTextView unusable editor state', () => {
+  // Valid JSON that Lexical cannot turn into a usable state. Lexical builds
+  // and seeds the editor inside a `useMemo` during render, so its invariant
+  // throws on the render path — past every plugin-level error boundary.
+  const UNUSABLE = [
+    ['an empty object', '{}'],
+    ['a JSON null', 'null'],
+    [
+      'an unregistered node directly under root',
+      JSON.stringify({
+        root: {
+          children: [{type: 'not-a-registered-node', version: 1}],
+          direction: null,
+          format: '',
+          indent: 0,
+          type: 'root',
+          version: 1,
+        },
+      }),
+    ],
+  ] as const;
+
+  it.each(UNUSABLE)('renders the fallback for %s', (_, value) => {
+    const onParseError = vi.fn();
+    expect(() =>
+      render(
+        <RichTextView
+          value={value}
+          label="Notes"
+          onParseError={onParseError}
+          errorFallback={<p>Could not render</p>}
+        />,
+      ),
+    ).not.toThrow();
+    expect(screen.getByText('Could not render')).toBeInTheDocument();
+    expect(onParseError).toHaveBeenCalled();
+  });
+
+  it('recovers once a usable value arrives', async () => {
+    const {rerender} = render(
+      <RichTextView
+        value="{}"
+        label="Notes"
+        errorFallback={<p>Could not render</p>}
+      />,
+    );
+    expect(screen.getByText('Could not render')).toBeInTheDocument();
+
+    rerender(
+      <RichTextView
+        value={HELLO_STATE}
+        label="Notes"
+        errorFallback={<p>Could not render</p>}
+      />,
+    );
+    await waitFor(() =>
+      expect(screen.getByText('Hello world')).toBeInTheDocument(),
+    );
+    expect(screen.queryByText('Could not render')).not.toBeInTheDocument();
+  });
+});
+
+describe('RichTextView rest props on the root', () => {
+  const REST = {
+    id: 'view-root',
+    'data-testid': 'view',
+    'aria-describedby': 'host-help',
+  } as const;
+
+  it('reach the root in the normal branch', async () => {
+    render(<RichTextView value={HELLO_STATE} label="Notes" {...REST} />);
+    await waitFor(() =>
+      expect(screen.getByText('Hello world')).toBeInTheDocument(),
+    );
+    const root = screen.getByTestId('view');
+    expect(root).toHaveAttribute('id', 'view-root');
+    expect(root).toHaveAttribute('aria-describedby', 'host-help');
+    // Still the styled root, not a bare div.
+    expect(root.className).not.toBe('');
+  });
+
+  it('reach the root in the error-fallback branch too', () => {
+    render(
+      <RichTextView
+        value="not json"
+        label="Notes"
+        errorFallback={<p>Could not render</p>}
+        {...REST}
+      />,
+    );
+    const root = screen.getByTestId('view');
+    expect(root).toHaveAttribute('id', 'view-root');
+    expect(root).toHaveAttribute('aria-describedby', 'host-help');
+    expect(root.className).not.toBe('');
+    expect(root).toContainElement(screen.getByText('Could not render'));
   });
 });

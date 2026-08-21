@@ -3041,4 +3041,15 @@ describe('trigger hit target', () => {
     expect(css).toMatch(/align-self:\s*stretch/);
     expect(css).toMatch(/padding-(block|top)/);
   });
+
+  it('zeroes the container block padding so the stretch is not cancelled', () => {
+    render(<Selector label="Fruit" size="sm" options={OPTIONS} />);
+    const container = screen.getByRole('combobox').parentElement as HTMLElement;
+    const css = cssRulesFor(container);
+    // The other half of the fix: block padding on the container would keep
+    // the button boxed inside it, so `align-self: stretch` would buy nothing.
+    // Zero — not absent — because the shared input wrapper sets its own.
+    expect(css).toMatch(/padding-block:\s*0(px)?\b/);
+    expect(css).not.toMatch(/padding-block:\s*var\(/);
+  });
 });

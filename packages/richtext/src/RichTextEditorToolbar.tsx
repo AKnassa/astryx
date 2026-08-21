@@ -884,6 +884,17 @@ export function RichTextEditorToolbar({
     },
   ];
 
+  // The Selector reports a selection only for a value it has an option for.
+  // Painting the glyph for anything else makes the trigger contradict itself
+  // — an "H1" mark beside a "Select…" label when the caret sits in a heading
+  // level this toolbar was not configured to offer, or in an h4-h6 the block
+  // list cannot express at all.
+  const hasBlockOption = blockOptions.some(option =>
+    typeof option === 'string'
+      ? option === blockType
+      : 'value' in option && option.value === blockType,
+  );
+
   return (
     <>
       <Toolbar
@@ -936,7 +947,7 @@ export function RichTextEditorToolbar({
               size={size}
               value={blockType}
               options={blockOptions}
-              startIcon={resolveIcon(blockType)}
+              startIcon={hasBlockOption ? resolveIcon(blockType) : undefined}
               isDisabled={!isEditable}
               xstyle={toolbarTouchStyles.control}
               onChange={value => setBlock(value as BlockType)}

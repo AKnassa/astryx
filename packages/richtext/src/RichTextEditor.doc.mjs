@@ -136,7 +136,7 @@ export const docs = {
       name: 'maxLength',
       type: 'number',
       description:
-        'Maximum number of characters. When set, a character counter (current/max) is displayed below the editor. Like TextArea, does not enforce the limit natively; the counter shows error styling when the plain-text length exceeds the limit.',
+        'Maximum number of characters. When set, a character counter (current/max) is displayed below the editor. Like TextArea, does not enforce the limit natively; the counter shows error styling when the plain-text content exceeds the limit. Counted in characters, not UTF-16 code units, so an emoji counts as one.',
     },
     {
       name: 'width',
@@ -185,7 +185,7 @@ export const docs = {
       {
         guidance: true,
         description:
-          'Persist content by serializing editorState.toJSON() in onChange; rehydrate via defaultValue / RichTextView value. Always pass RichTextView a label — it renders a keyboard-reachable role="textbox" surface, and without an accessible name it fails axe aria-input-field-name (the component dev-warns when label is omitted).',
+          'Persist content by serializing editorState.toJSON() in onChange; rehydrate via defaultValue / RichTextView value. Always pass RichTextView a label — it renders a keyboard-reachable role="textbox" surface, and without an accessible name it fails axe aria-input-field-name (the component dev-warns when label is omitted or blank).',
       },
       {
         guidance: true,
