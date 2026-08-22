@@ -98,7 +98,9 @@ export default function MarketingFeatureSections() {
               <Section variant="transparent" padding={0}>
                 <Grid columns={{minWidth: 320, max: 2}} gap={6} align="center">
                   <VStack gap={4}>
-                    <Badge variant="teal" label="Layout" />
+                    <HStack>
+                      <Badge variant="teal" label="Layout" />
+                    </HStack>
                     <Heading level={2} type="display-3" textWrap="balance">
                       Frame the page before you fill it
                     </Heading>
@@ -195,7 +197,9 @@ export default function MarketingFeatureSections() {
                     align="stretch">
                     <Card style={bentoWide}>
                       <VStack gap={3}>
-                        <Badge variant="blue" label="Tokens" />
+                        <HStack>
+                          <Badge variant="blue" label="Tokens" />
+                        </HStack>
                         <Heading level={3}>One rename, every surface</Heading>
                         <Text type="supporting" color="secondary">
                           Colors, spacing, and radii are named by purpose.
@@ -206,7 +210,9 @@ export default function MarketingFeatureSections() {
                     </Card>
                     <Card>
                       <VStack gap={3}>
-                        <Badge variant="orange" label="Codemods" />
+                        <HStack>
+                          <Badge variant="orange" label="Codemods" />
+                        </HStack>
                         <Heading level={3}>Upgrades you can run</Heading>
                         <Text type="supporting" color="secondary">
                           Breaking changes ship with a codemod, so a version

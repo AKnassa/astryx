@@ -16,15 +16,14 @@ import {TextInput} from '@astryxdesign/core/TextInput';
 
 // ─── Styles ─────────────────────────────────────────────────────────────────
 
+const brandBlock: CSSProperties = {
+  maxWidth: 320,
+};
 const outer: CSSProperties = {
   maxWidth: 1120,
   width: '100%',
   paddingInline: 'var(--spacing-6)',
   paddingBlock: 'var(--spacing-8)',
-};
-const newsletterField: CSSProperties = {
-  minWidth: 220,
-  flex: '1 1 220px',
 };
 
 // ─── Link data ──────────────────────────────────────────────────────────────
@@ -78,17 +77,17 @@ export default function MarketingFooter() {
                 </Text>
                 <Section variant="muted" padding={6}>
                   <VStack gap={6}>
+                    <VStack gap={2} style={brandBlock}>
+                      <Heading level={2}>Astryx</Heading>
+                      <Text type="supporting" color="secondary">
+                        A design system for building internal tools and
+                        products.
+                      </Text>
+                    </VStack>
                     <Grid
-                      columns={{minWidth: 200, max: 5}}
+                      columns={{minWidth: 180, max: 4}}
                       gap={6}
                       align="start">
-                      <VStack gap={2}>
-                        <Heading level={2}>Astryx</Heading>
-                        <Text type="supporting" color="secondary">
-                          A design system for building internal tools and
-                          products.
-                        </Text>
-                      </VStack>
                       {SITEMAP.map(column => (
                         <VStack key={column.id} gap={2}>
                           <Heading level={3}>{column.heading}</Heading>
@@ -145,14 +144,15 @@ export default function MarketingFooter() {
                         </Text>
                       </VStack>
                       <HStack gap={2} vAlign="end" wrap="wrap">
-                        <TextInput
-                          label="Email address"
-                          value={email}
-                          onChange={setEmail}
-                          type="email"
-                          placeholder="you@company.com"
-                          style={newsletterField}
-                        />
+                        <VStack>
+                          <TextInput
+                            label="Email address"
+                            value={email}
+                            onChange={setEmail}
+                            type="email"
+                            placeholder="you@company.com"
+                          />
+                        </VStack>
                         <Button label="Subscribe" variant="primary" />
                       </HStack>
                     </Grid>
