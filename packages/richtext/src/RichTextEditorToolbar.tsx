@@ -982,7 +982,15 @@ export function RichTextEditorToolbar({
                 xstyle={toolbarTouchStyles.control}
                 aria-haspopup="dialog"
                 aria-expanded={isLinkDialogOpen}
-                onMouseDown={event => event.preventDefault()}
+                // Block body, not a concise one: the handler's return type is
+                // then `void` outright. `onMouseDown` is typed through core's
+                // BaseProps, so a concise body infers `any` wherever core's
+                // declarations are not resolvable (CI lints before building
+                // dists) — and `promise-function-async` runs with
+                // `allowAny: false`.
+                onMouseDown={event => {
+                  event.preventDefault();
+                }}
                 onPressedChange={toggleLink}
               />
             )}
