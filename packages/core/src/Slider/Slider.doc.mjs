@@ -137,12 +137,6 @@ export const docs = {
         'Status indicator object (`{ type, message }`) for validation feedback.',
     },
     {
-      name: 'width',
-      type: 'SizeValue',
-      description:
-        "Width of the field. Numbers are treated as pixels, strings are used as-is (e.g. '100%'). Sizes the whole field (label, control, and status) so they stay aligned, unlike setting width via xstyle/className/style.",
-    },
-    {
       name: 'labelTooltip',
       type: 'string',
       description: 'Tooltip text for an info icon displayed next to the label.',
