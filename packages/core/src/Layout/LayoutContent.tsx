@@ -37,6 +37,10 @@ const styles = stylex.create({
     height: '100%',
     flex: 1,
     minHeight: 0,
+    // `clip`, never `hidden`/`auto`: clip creates no scroll container, so
+    // `position: sticky` descendants keep tracking the viewport in auto-height
+    // shells. The docsite home hero pins its whole pin-and-cover this way —
+    // `hidden` here would silently un-pin it (see #5470).
     overflow: 'clip',
     // Default: inner padding on all sides (will be overridden by position-specific styles)
     paddingInlineStart: `var(--layout-padding-inner-x, ${spacingVars['--spacing-4']})`,
