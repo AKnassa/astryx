@@ -138,7 +138,11 @@ const styles = stylex.create({
   // lifts with the document and can never paint past its own edge — which is
   // what lets the site keep native overscroll instead of suppressing it
   // (#5470). A rail inside the 760px band alone releases its layer after ~48px
-  // of scroll. Decorative: never intercepts pointer events.
+  // of scroll. Sticky also needs no scroll container between the rail and the
+  // viewport: AppShell's main area (core LayoutContent) is `overflow: clip` in
+  // auto-height shells, and `hidden` or `auto` there would silently un-pin
+  // every layer; home-hero-overscroll.test.ts guards that link. Decorative:
+  // never intercepts pointer events.
   rail: {
     position: 'absolute',
     inset: 0,
