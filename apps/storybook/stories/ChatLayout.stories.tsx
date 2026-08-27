@@ -839,6 +839,50 @@ const FULL_HISTORY: HistoryEntry[] = Array.from({length: 100}, (_, i) => ({
       : `Answer #${i + 1}: step ${i + 1} runs after the build finishes — it verifies the artifacts and publishes them to the registry.`,
 }));
 
+function LoadEarlierHistoryDemo({align}: {align?: 'top' | 'bottom'}) {
+  const [messages, setMessages] = useState<HistoryEntry[]>(() =>
+    FULL_HISTORY.slice(-HISTORY_PAGE_SIZE),
+  );
+
+  const hasEarlier = messages.length < FULL_HISTORY.length;
+
+  const loadEarlier = useCallback(async () => {
+    // Simulated backend latency so the top spinner is visible.
+    await new Promise(resolve => setTimeout(resolve, 800));
+    setMessages(prev => {
+      const firstIndex = FULL_HISTORY.findIndex(m => m.id === prev[0]?.id);
+      if (firstIndex <= 0) {
+        return prev;
+      }
+      const start = Math.max(0, firstIndex - HISTORY_PAGE_SIZE);
+      return [...FULL_HISTORY.slice(start, firstIndex), ...prev];
+    });
+  }, []);
+
+  return (
+    <div style={{height: '100vh', display: 'flex', flexDirection: 'column'}}>
+      <ChatLayout
+        composer={<ChatComposer onSubmit={() => {}} placeholder="Message…" />}>
+        <ChatMessageList
+          align={align}
+          scrollToTopAction={hasEarlier ? loadEarlier : undefined}>
+          {messages.map(msg =>
+            msg.role === 'user' ? (
+              <ChatMessage key={msg.id} sender="user">
+                <ChatMessageBubble>{msg.text}</ChatMessageBubble>
+              </ChatMessage>
+            ) : (
+              <ChatMessage key={msg.id} sender="assistant">
+                <Markdown density="compact">{msg.text}</Markdown>
+              </ChatMessage>
+            ),
+          )}
+        </ChatMessageList>
+      </ChatLayout>
+    </div>
+  );
+}
+
 /**
  * Long transcript paged in with scrollToTopAction. Scroll to the top:
  * a page of earlier history loads (spinner while pending) and the reading
@@ -847,50 +891,16 @@ const FULL_HISTORY: HistoryEntry[] = Array.from({length: 100}, (_, i) => ({
  */
 export const LoadEarlierHistory: StoryObj = {
   name: 'Load Earlier History',
-  render: () => {
-    const [messages, setMessages] = useState<HistoryEntry[]>(() =>
-      FULL_HISTORY.slice(-HISTORY_PAGE_SIZE),
-    );
+  render: () => <LoadEarlierHistoryDemo />,
+};
 
-    const hasEarlier = messages.length < FULL_HISTORY.length;
-
-    const loadEarlier = useCallback(async () => {
-      // Simulated backend latency so the top spinner is visible.
-      await new Promise(resolve => setTimeout(resolve, 800));
-      setMessages(prev => {
-        const firstIndex = FULL_HISTORY.findIndex(m => m.id === prev[0]?.id);
-        if (firstIndex <= 0) {
-          return prev;
-        }
-        const start = Math.max(0, firstIndex - HISTORY_PAGE_SIZE);
-        return [...FULL_HISTORY.slice(start, firstIndex), ...prev];
-      });
-    }, []);
-
-    return (
-      <div style={{height: '100vh', display: 'flex', flexDirection: 'column'}}>
-        <ChatLayout
-          composer={
-            <ChatComposer onSubmit={() => {}} placeholder="Message…" />
-          }>
-          <ChatMessageList
-            scrollToTopAction={hasEarlier ? loadEarlier : undefined}>
-            {messages.map(msg =>
-              msg.role === 'user' ? (
-                <ChatMessage key={msg.id} sender="user">
-                  <ChatMessageBubble>{msg.text}</ChatMessageBubble>
-                </ChatMessage>
-              ) : (
-                <ChatMessage key={msg.id} sender="assistant">
-                  <Markdown density="compact">{msg.text}</Markdown>
-                </ChatMessage>
-              ),
-            )}
-          </ChatMessageList>
-        </ChatLayout>
-      </div>
-    );
-  },
+/**
+ * The same transcript with align="top": there is no bottom spacer, so the
+ * reading position is anchored past the sentinel instead.
+ */
+export const LoadEarlierHistoryTopAligned: StoryObj = {
+  name: 'Load Earlier History (Top Aligned)',
+  render: () => <LoadEarlierHistoryDemo align="top" />,
 };
 
 /** Empty state using EmptyState */

@@ -4,7 +4,7 @@
 
 /**
  * @file ChatMessageList.tsx
- * @input Uses React, StyleX, ChatListContext, useIsomorphicLayoutEffect, theme tokens, spacing step utilities
+ * @input Uses React, StyleX, ChatListContext, useIsomorphicLayoutEffect, theme tokens, spacing step utilities, getScrollableAncestor
  * @output Exports ChatMessageList component and ChatMessageListProps
  * @position Presentational message container — holds ChatMessage children
  *
@@ -48,6 +48,7 @@ import {useIsomorphicLayoutEffect} from '../hooks/useIsomorphicLayoutEffect';
 import type {BaseProps} from '../BaseProps';
 import type {SpacingStep} from '../utils/types';
 import {themeProps} from '../utils/themeProps';
+import {getScrollableAncestor} from '../utils/getScrollableAncestor';
 
 export interface ChatMessageListProps extends BaseProps<HTMLDivElement> {
   /** Ref forwarded to the root element */
@@ -214,32 +215,6 @@ const gapStyles = stylex.create({
 });
 
 // =============================================================================
-// Helpers
-// =============================================================================
-
-/**
- * Nearest scrollable ancestor — used only when the list renders outside a
- * ChatLayout, so scroll compensation targets the scroller that actually
- * clips the list rather than the page. Accepts the deprecated `overlay`
- * value like Outline's getScrollableAncestor, but deliberately does not
- * require scrollHeight > clientHeight: an underfilled list's scroller
- * cannot scroll *yet*, and the auto-refill cycle must still target it.
- */
-function findScrollContainer(el: Element | null): Element | null {
-  for (let node = el?.parentElement; node != null; node = node.parentElement) {
-    const {overflowY} = getComputedStyle(node);
-    if (
-      overflowY === 'auto' ||
-      overflowY === 'scroll' ||
-      overflowY === 'overlay'
-    ) {
-      return node;
-    }
-  }
-  return null;
-}
-
-// =============================================================================
 // Component
 // =============================================================================
 
@@ -283,6 +258,7 @@ export function ChatMessageList({
   const sentinelRef = useRef<HTMLDivElement>(null);
   const innerRef = useRef<HTMLDivElement>(null);
   const spacerRef = useRef<HTMLDivElement>(null);
+  const loadingTopRef = useRef<HTMLDivElement>(null);
   const [isLoadingTop, startTransition] = useTransition();
 
   const scrollToTopActionRef = useRef(scrollToTopAction);
@@ -309,43 +285,56 @@ export function ChatMessageList({
     children !== false &&
     !(Array.isArray(children) && children.length === 0);
 
-  // Start one load-earlier cycle: anchor the first content element so the
+  // The first message element: whatever follows the last structural element
+  // above the content. That is the spacer for align="bottom"; align="top"
+  // omits it, leaving the spinner while a load is pending, else the sentinel.
+  const getFirstMessageElement = useCallback(
+    () =>
+      (spacerRef.current ?? loadingTopRef.current ?? sentinelRef.current)
+        ?.nextElementSibling ?? null,
+    [],
+  );
+
+  // Start one load-earlier cycle: anchor the first message element so the
   // viewport can be restored after the prepend (native scroll anchoring is
   // suppressed at scrollTop 0, which is exactly where the sentinel fires),
   // then run the action inside a transition. Single-flight.
-  const beginLoadEarlier = useCallback((container: Element | null) => {
-    if (loadEarlierInFlightRef.current) {
-      return;
-    }
-    const action = scrollToTopActionRef.current;
-    if (!action) {
-      return;
-    }
-    loadEarlierInFlightRef.current = true;
-
-    const resolvedContainer = container ?? document.scrollingElement;
-    const anchor = spacerRef.current?.nextElementSibling;
-    if (resolvedContainer && anchor) {
-      prependAnchorRef.current = {
-        element: anchor,
-        container: resolvedContainer,
-        top:
-          anchor.getBoundingClientRect().top -
-          resolvedContainer.getBoundingClientRect().top,
-        expectedScrollTop: resolvedContainer.scrollTop,
-      };
-    } else {
-      prependAnchorRef.current = null;
-    }
-
-    startTransition(async () => {
-      try {
-        await action();
-      } finally {
-        loadEarlierInFlightRef.current = false;
+  const beginLoadEarlier = useCallback(
+    (container: Element | null) => {
+      if (loadEarlierInFlightRef.current) {
+        return;
       }
-    });
-  }, []);
+      const action = scrollToTopActionRef.current;
+      if (!action) {
+        return;
+      }
+      loadEarlierInFlightRef.current = true;
+
+      const resolvedContainer = container ?? document.scrollingElement;
+      const anchor = getFirstMessageElement();
+      if (resolvedContainer && anchor) {
+        prependAnchorRef.current = {
+          element: anchor,
+          container: resolvedContainer,
+          top:
+            anchor.getBoundingClientRect().top -
+            resolvedContainer.getBoundingClientRect().top,
+          expectedScrollTop: resolvedContainer.scrollTop,
+        };
+      } else {
+        prependAnchorRef.current = null;
+      }
+
+      startTransition(async () => {
+        try {
+          await action();
+        } finally {
+          loadEarlierInFlightRef.current = false;
+        }
+      });
+    },
+    [getFirstMessageElement],
+  );
 
   // IntersectionObserver for scroll-to-top infinite scroll. The action
   // lives in a ref so an inline callback doesn't reconnect the observer
@@ -355,10 +344,13 @@ export function ChatMessageList({
       return;
     }
     const scrollContainer = layoutContext?.scrollContainerRef?.current;
-    // Compensation target: the layout's scroller, or — standalone — the
-    // scroller that actually clips the list, not the page.
+    // Compensation target: the layout's scroller, or, standalone, the
+    // scroller that actually clips the list rather than the page. No
+    // overflow requirement: an underfilled list's scroller cannot scroll
+    // yet, and the auto-refill cycle must still target it.
     const captureContainer =
-      scrollContainer ?? findScrollContainer(sentinelRef.current);
+      scrollContainer ??
+      getScrollableAncestor(sentinelRef.current, {requireOverflow: false});
 
     const observer = new IntersectionObserver(
       entries => {
@@ -405,7 +397,7 @@ export function ChatMessageList({
       anchor.expectedScrollTop = container.scrollTop;
     }
 
-    const prepended = spacerRef.current?.nextElementSibling !== element;
+    const prepended = getFirstMessageElement() !== element;
     if (prepended && !isLoadingTop) {
       prependAnchorRef.current = null;
       // Underfilled list: still pinned at the top after a successful page
@@ -450,7 +442,7 @@ export function ChatMessageList({
 
           {/* Loading spinner at top */}
           {isLoadingTop && (
-            <div {...stylex.props(styles.loadingTop)}>
+            <div ref={loadingTopRef} {...stylex.props(styles.loadingTop)}>
               <Spinner size="md" />
             </div>
           )}

@@ -704,4 +704,117 @@ describe('ChatMessageList — scrollToTopAction', () => {
 
     expect(scroller.scrollTop).toBe(400);
   });
+  // align="top" omits the bottom spacer, so the first message has to be
+  // found past the sentinel (and past the spinner while a load is pending).
+  it('preserves the reader\'s viewport position when align="top"', async () => {
+    const container = makeScrollContainer();
+    container.scrollTop = 37;
+    let resolveAction!: () => void;
+    const action = vi.fn(
+      async () => new Promise<void>(resolve => (resolveAction = resolve)),
+    );
+
+    const ui = (messages: string[]) => (
+      <ChatLayoutContext value={layoutCtx(container)}>
+        <ChatMessageList align="top" scrollToTopAction={action}>
+          {messages.map(m => (
+            <div key={m}>{m}</div>
+          ))}
+        </ChatMessageList>
+      </ChatLayoutContext>
+    );
+
+    const view = render(ui(['oldest-visible']));
+    const anchor = screen.getByText('oldest-visible');
+    let anchorTop = 100;
+    stubRect(anchor, () => anchorTop);
+
+    fireIntersect();
+    await act(async () => {});
+
+    view.rerender(ui(['earlier-1', 'earlier-2', 'oldest-visible']));
+    anchorTop = 500;
+    await act(async () => resolveAction());
+
+    expect(container.scrollTop).toBe(437);
+  });
+
+  it('compensates a late prepend when align="top"', async () => {
+    const container = makeScrollContainer();
+    const action = vi.fn(async () => {});
+
+    const ui = (messages: string[]) => (
+      <ChatLayoutContext value={layoutCtx(container)}>
+        <ChatMessageList align="top" scrollToTopAction={action}>
+          {messages.map(m => (
+            <div key={m}>{m}</div>
+          ))}
+        </ChatMessageList>
+      </ChatLayoutContext>
+    );
+
+    const view = render(ui(['oldest-visible']));
+    const anchor = screen.getByText('oldest-visible');
+    let anchorTop = 100;
+    stubRect(anchor, () => anchorTop);
+
+    fireIntersect();
+    await act(async () => {});
+    expect(container.scrollTop).toBe(0);
+
+    // Without a spacer the "did the prepend land" check must read past the
+    // sentinel as well, or the anchor disarms before this commit.
+    anchorTop = 500;
+    view.rerender(ui(['earlier-1', 'earlier-2', 'oldest-visible']));
+    await act(async () => {});
+
+    expect(container.scrollTop).toBe(400);
+  });
+
+  it('anchors a message, not the spinner, when a load fires as the previous one resolves when align="top"', async () => {
+    const container = makeScrollContainer();
+    container.scrollTop = 37;
+    let resolveAction!: () => void;
+    const action = vi.fn(
+      async () => new Promise<void>(resolve => (resolveAction = resolve)),
+    );
+
+    const ui = (messages: string[]) => (
+      <ChatLayoutContext value={layoutCtx(container)}>
+        <ChatMessageList align="top" scrollToTopAction={action}>
+          {messages.map(m => (
+            <div key={m}>{m}</div>
+          ))}
+        </ChatMessageList>
+      </ChatLayoutContext>
+    );
+
+    const view = render(ui(['oldest-visible']));
+    const anchor = screen.getByText('oldest-visible');
+    let anchorTop = 100;
+    stubRect(anchor, () => anchorTop);
+
+    // First page comes back empty.
+    fireIntersect();
+    await act(async () => {});
+    expect(action).toHaveBeenCalledTimes(1);
+
+    // Resolve outside act: the in-flight guard clears on a microtask while
+    // the spinner stays mounted until React commits the settled transition.
+    resolveAction();
+    for (let i = 0; i < 10; i++) {
+      await Promise.resolve();
+    }
+    // The reader is still parked at the top, so the sentinel fires again in
+    // that window, with the spinner sitting between it and the first message.
+    fireIntersect();
+    await act(async () => {});
+    expect(action).toHaveBeenCalledTimes(2);
+
+    view.rerender(ui(['earlier-1', 'earlier-2', 'oldest-visible']));
+    anchorTop = 500;
+    await act(async () => resolveAction());
+
+    expect(container.scrollTop).toBe(437);
+  });
 });
