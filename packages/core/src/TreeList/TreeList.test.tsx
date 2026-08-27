@@ -17,6 +17,8 @@ import type {TreeListItemData} from './TreeListTypes';
 import {defineTheme} from '../theme/defineTheme';
 import {generateThemeCSS} from '../theme/generateThemeRules';
 import {FOCUS_OUTLINE} from '../utils/focusOutline.stylex';
+import {Icon} from '../Icon';
+import type {SVGProps} from 'react';
 
 function generateThemeTestCSS(theme: Parameters<typeof generateThemeCSS>[0]) {
   const {prose, component} = generateThemeCSS(theme);
@@ -128,6 +130,27 @@ const expandedParentItems: TreeListItemData[] = [
   },
   {id: 'sibling', label: 'Sibling'},
 ];
+
+/**
+ * Every declaration the StyleX atomic classes on `el` contribute, read back
+ * from the injected stylesheets — so a test can assert the box a column or a
+ * glyph actually gets. Debug classes (`Foo__styles.bar`) carry no rules and
+ * are skipped.
+ */
+function declarationsOf(el: Element): string {
+  const css = collectCssText();
+  return Array.from(el.classList)
+    .filter(cls => /^x[0-9a-z]+$/i.test(cls))
+    .flatMap(cls =>
+      Array.from(
+        css.matchAll(
+          new RegExp(`\\.${cls}(?![0-9a-z])[^{,]*\\{([^}]*)\\}`, 'gi'),
+        ),
+        m => m[1],
+      ),
+    )
+    .join('\n');
+}
 
 describe('TreeList', () => {
   // ===========================================================================
@@ -1357,44 +1380,6 @@ describe('TreeList', () => {
       expect(indentOf('Sibling')).toContain('+');
     });
 
-    it('does not apply the state-driven rotation classes to custom icons', () => {
-      const {rerender} = render(
-        <TreeList
-          key="collapsed"
-          items={nestedItems}
-          renderExpandIcon={renderFolderIcon}
-        />,
-      );
-      const collapsedWrapper =
-        screen.getByTestId('folder-closed').parentElement!;
-      const collapsedClasses = collapsedWrapper.className;
-      rerender(
-        <TreeList
-          key="expanded"
-          items={nestedItemsExpanded}
-          renderExpandIcon={renderFolderIcon}
-        />,
-      );
-      const expandedWrapper = screen.getByTestId('folder-open').parentElement!;
-      // Same wrapper classes in both states → no rotation is applied to
-      // custom icons. The default chevron differs between states (rotate 90).
-      expect(expandedWrapper.className).toBe(collapsedClasses);
-
-      const {container: defCollapsed} = render(
-        <TreeList items={nestedItems} />,
-      );
-      const {container: defExpanded} = render(
-        <TreeList items={nestedItemsExpanded} />,
-      );
-      const chevronCollapsed = defCollapsed.querySelector(
-        'button[data-tree-toggle] > span',
-      )!;
-      const chevronExpanded = defExpanded.querySelector(
-        'button[data-tree-toggle] > span',
-      )!;
-      expect(chevronExpanded.className).not.toBe(chevronCollapsed.className);
-    });
-
     it('fires the item onClick when a leaf icon itself is clicked', async () => {
       const user = userEvent.setup();
       const onClick = vi.fn();
@@ -1567,6 +1552,76 @@ describe('TreeList', () => {
       await user.keyboard('{ArrowLeft}');
       expect(screen.queryByText('Child 1')).not.toBeInTheDocument();
       expect(screen.getByTestId('folder-closed')).toBeInTheDocument();
+    });
+
+    // =========================================================================
+    // Size contract: the indicator column is 1rem — the same box as
+    // `<Icon size="sm">` — so a custom glyph tracks it at any root font size.
+    // =========================================================================
+
+    const GlyphStub = (props: SVGProps<SVGSVGElement>) => (
+      <svg viewBox="0 0 24 24" {...props} />
+    );
+
+    it('puts the toggle column, the leaf slot and a size="sm" Icon on one 1rem box', () => {
+      render(
+        <TreeList
+          items={nestedItems}
+          renderExpandIcon={({hasChildren}) => (
+            <Icon
+              icon={GlyphStub}
+              size="sm"
+              data-testid={hasChildren ? 'folder' : 'file'}
+            />
+          )}
+        />,
+      );
+      const toggle = screen.getByRole('button', {name: 'Toggle children'});
+      const folder = screen.getByTestId('folder');
+      const leafSlot = screen.getByTestId('file').parentElement!;
+      for (const el of [toggle, leafSlot, folder]) {
+        const css = declarationsOf(el);
+        expect(css).toContain('width: 1rem');
+        expect(css).toContain('height: 1rem');
+        expect(css).not.toContain('var(--spacing-4)');
+      }
+    });
+
+    it('keeps the default chevron on that same 1rem box, not re-pinned to the spacing token', () => {
+      render(<TreeList items={nestedItems} />);
+      const toggle = screen.getByRole('button', {name: 'Toggle children'});
+      const glyph = toggle.firstElementChild!;
+      expect(declarationsOf(glyph)).toContain('width: 1rem');
+      expect(declarationsOf(glyph)).not.toContain('var(--spacing-4)');
+      expect(declarationsOf(toggle)).toContain('width: 1rem');
+    });
+
+    it('reserves a null-leaf chevron column with that same 1rem box', () => {
+      render(<TreeList items={nestedItems} />);
+      const indent = indentOf('Sibling');
+      expect(indent).toContain('+ 1rem +');
+      expect(indent).not.toContain('--spacing-4');
+    });
+
+    it("renders a custom icon as the toggle's direct child, with no rotation or RTL mirror", () => {
+      render(
+        <TreeList
+          items={nestedItemsExpanded}
+          renderExpandIcon={renderFolderIcon}
+        />,
+      );
+      const toggle = screen.getByRole('button', {name: 'Toggle children'});
+      const icon = screen.getByTestId('folder-open');
+      // No styling wrapper between the toggle and the consumer's node.
+      expect(icon.parentElement).toBe(toggle);
+      expect(declarationsOf(toggle)).not.toContain('transform');
+
+      // The default chevron, by contrast, does rotate when expanded.
+      const {container} = render(<TreeList items={nestedItemsExpanded} />);
+      const chevron = container.querySelector(
+        'button[data-tree-toggle]',
+      )!.firstElementChild!;
+      expect(declarationsOf(chevron)).toContain('rotate(90deg)');
     });
   });
 });

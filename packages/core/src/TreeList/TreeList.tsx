@@ -88,14 +88,18 @@ export interface TreeListProps extends BaseProps<HTMLDivElement> {
    * wiring (aria-expanded, aria-label, roving tabindex) regardless of the
    * icon rendered inside it.
    *
+   * The indicator column is `1rem` — the same box as `<Icon size="sm">` and
+   * the default chevron — so size custom icons `sm` and they fill the column
+   * at any root font size; a larger icon overflows it.
+   *
    * @example
    * ```
    * <TreeList
    *   items={items}
    *   renderExpandIcon={({isExpanded, hasChildren}) =>
    *     hasChildren
-   *       ? (isExpanded ? <Icon icon={FolderOpenIcon} /> : <Icon icon={FolderIcon} />)
-   *       : <Icon icon={DocumentIcon} />
+   *       ? <Icon icon={isExpanded ? FolderOpenIcon : FolderIcon} size="sm" />
+   *       : <Icon icon={DocumentIcon} size="sm" />
    *   }
    * />
    * ```

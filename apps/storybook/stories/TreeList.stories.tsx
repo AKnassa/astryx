@@ -149,9 +149,9 @@ export const CustomExpandIcons: Story = {
     items: fileTreeItems,
     renderExpandIcon: ({isExpanded, hasChildren}) =>
       hasChildren ? (
-        <Icon icon={isExpanded ? FolderOpenIcon : FolderIcon} />
+        <Icon icon={isExpanded ? FolderOpenIcon : FolderIcon} size="sm" />
       ) : (
-        <Icon icon={DocumentIcon} />
+        <Icon icon={DocumentIcon} size="sm" />
       ),
   },
 };
