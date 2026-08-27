@@ -243,19 +243,25 @@ function contractEntries(docs) {
  * Compare every `{Name}.doc.mjs` under `srcDir` to the matching `{Name}Props`.
  *
  * @param {string} srcDir
- * @returns {Promise<{missing: {component: string, prop: string, file: string}[], unresolved: {component: string, file: string}[]}>}
+ * @returns {Promise<{missing: {component: string, prop: string, file: string}[], unresolved: {component: string, file: string}[], unreadable: {file: string, reason: string}[], docCount: number}>}
  */
 export async function checkContract(srcDir) {
   const sourceFiles = walkSource(srcDir);
   const {program, checker} = buildProgram(sourceFiles);
   const missing = [];
   const unresolved = [];
+  const unreadable = [];
+  const docFiles = walkDocs(srcDir);
 
-  for (const docFile of walkDocs(srcDir)) {
+  for (const docFile of docFiles) {
     let mod;
     try {
       mod = await import(pathToFileURL(docFile).href);
-    } catch {
+    } catch (err) {
+      unreadable.push({
+        file: docFile,
+        reason: err instanceof Error ? err.message : String(err),
+      });
       continue;
     }
     const docs = mod.default ?? mod.docs;
@@ -287,27 +293,42 @@ export async function checkContract(srcDir) {
   missing.sort(
     (a, b) => a.component.localeCompare(b.component) || a.prop.localeCompare(b.prop),
   );
-  return {missing, unresolved};
+  unreadable.sort((a, b) => a.file.localeCompare(b.file));
+  return {missing, unresolved, unreadable, docCount: docFiles.length};
 }
 
 async function main() {
-  const {missing, unresolved} = await checkContract(CORE_SRC);
+  const {missing, unresolved, unreadable, docCount} =
+    await checkContract(CORE_SRC);
 
-  if (missing.length > 0) {
-    console.error(
-      `\n✗ check:contract found ${missing.length} undocumented public prop(s):\n`,
-    );
-    for (const {component, prop, file} of missing) {
-      const rel = path.relative(ROOT, file);
-      console.error(`  ${component}.${prop}  (${rel})`);
+  if (unreadable.length > 0 || missing.length > 0) {
+    if (unreadable.length > 0) {
+      console.error(
+        `\n✗ check:contract could not load ${unreadable.length} doc file(s):\n`,
+      );
+      for (const {file, reason} of unreadable) {
+        console.error(`  ${path.relative(ROOT, file)}`);
+        console.error(`    ${reason}`);
+      }
+      console.error(
+        '\n    → Fix the syntax/import error in that .doc.mjs. A broken doc is not skipped.\n',
+      );
     }
-    console.error(
-      '\n    → Document the prop in that component\'s .doc.mjs `props[]`, or it is not part of the public contract.\n',
-    );
+    if (missing.length > 0) {
+      console.error(
+        `\n✗ check:contract found ${missing.length} undocumented public prop(s):\n`,
+      );
+      for (const {component, prop, file} of missing) {
+        const rel = path.relative(ROOT, file);
+        console.error(`  ${component}.${prop}  (${rel})`);
+      }
+      console.error(
+        '\n    → Document the prop in that component\'s .doc.mjs `props[]`, or it is not part of the public contract.\n',
+      );
+    }
     process.exit(1);
   }
 
-  const docCount = walkDocs(CORE_SRC).length;
   console.log(
     `✓ check:contract — ${docCount} doc(s) checked, 0 undocumented public props` +
       (unresolved.length > 0
@@ -320,5 +341,8 @@ async function main() {
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
-  main();
+  main().catch(err => {
+    console.error(err);
+    process.exit(2);
+  });
 }

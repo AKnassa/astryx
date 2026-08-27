@@ -336,4 +336,231 @@ describe('checkContract — public props derived from the type checker', () => {
     expect(missing).toEqual([]);
     expect(unresolved.some(u => u.component === 'useTableSortable')).toBe(false);
   });
+
+  it('records unresolved when a component doc has props[] but no matching {Name}Props', async () => {
+    const src = fixture({
+      'BaseProps.ts': BASE_PROPS,
+      'Widget/Widget.doc.mjs': `
+        export const docs = {
+          name: 'Widget',
+          props: [{name: 'label', type: 'string', description: 'Visible text'}],
+        };
+      `,
+    });
+    const {missing, unresolved} = await checkContract(src);
+    expect(missing).toEqual([]);
+    expect(unresolved).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({component: 'Widget'}),
+      ]),
+    );
+  });
+
+  it('reads a stamped default export, not only `export const docs`', async () => {
+    const src = fixture({
+      'BaseProps.ts': BASE_PROPS,
+      'Widget/Widget.tsx': `
+        import type {BaseProps} from '../BaseProps';
+        export interface WidgetProps extends BaseProps {
+          label: string;
+          width?: string;
+        }
+      `,
+      'Widget/Widget.doc.mjs': `
+        export default {
+          type: 'component',
+          name: 'Widget',
+          props: [{name: 'label', type: 'string', description: 'Visible text'}],
+        };
+      `,
+    });
+    const {missing} = await checkContract(src);
+    expect(missing).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({component: 'Widget', prop: 'width'}),
+      ]),
+    );
+  });
+
+  it('reports a .doc.mjs that cannot be imported instead of swallowing it', async () => {
+    const src = fixture({
+      'BaseProps.ts': BASE_PROPS,
+      'Widget/Widget.tsx': `
+        import type {BaseProps} from '../BaseProps';
+        export interface WidgetProps extends BaseProps {
+          label: string;
+        }
+      `,
+      'Widget/Widget.doc.mjs': `export const docs = {`,
+    });
+    const result = await checkContract(src);
+    expect(result.unreadable).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          file: expect.stringContaining('Widget.doc.mjs'),
+        }),
+      ]),
+    );
+  });
+
+  it('still skips ref and xstyle when the component redeclares them', async () => {
+    const src = fixture({
+      'BaseProps.ts': BASE_PROPS,
+      'Widget/Widget.tsx': `
+        import type {BaseProps} from '../BaseProps';
+        export interface WidgetProps extends BaseProps {
+          label: string;
+          ref?: unknown;
+          xstyle?: unknown;
+        }
+      `,
+      'Widget/Widget.doc.mjs': `
+        export const docs = {
+          name: 'Widget',
+          props: [{name: 'label', type: 'string', description: 'Visible text'}],
+        };
+      `,
+    });
+    const {missing} = await checkContract(src);
+    expect(missing.map(m => m.prop)).not.toEqual(
+      expect.arrayContaining(['ref', 'xstyle']),
+    );
+    expect(missing).toEqual([]);
+  });
+
+  it('derives props from a type alias, not only an interface', async () => {
+    const src = fixture({
+      'BaseProps.ts': BASE_PROPS,
+      'Widget/Widget.tsx': `
+        export type WidgetProps = {
+          label: string;
+          width?: string;
+        };
+      `,
+      'Widget/Widget.doc.mjs': `
+        export const docs = {
+          name: 'Widget',
+          props: [{name: 'label', type: 'string', description: 'Visible text'}],
+        };
+      `,
+    });
+    const {missing} = await checkContract(src);
+    expect(missing).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({component: 'Widget', prop: 'width'}),
+      ]),
+    );
+  });
+
+  it('follows Pick<ParentProps> the same way it follows Omit', async () => {
+    const src = fixture({
+      'BaseProps.ts': BASE_PROPS,
+      'Button/Button.tsx': `
+        export interface ButtonProps {
+          label: string;
+          href?: string;
+          size?: string;
+        }
+      `,
+      'LinkButton/LinkButton.tsx': `
+        import type {ButtonProps} from '../Button/Button';
+        export type LinkButtonProps = Pick<ButtonProps, 'label' | 'href'> & {
+          icon: unknown;
+        };
+      `,
+      'LinkButton/LinkButton.doc.mjs': `
+        export const docs = {
+          name: 'LinkButton',
+          props: [{name: 'icon', type: 'unknown', description: 'Glyph'}],
+        };
+      `,
+    });
+    const {missing} = await checkContract(src);
+    const props = missing
+      .filter(m => m.component === 'LinkButton')
+      .map(m => m.prop)
+      .sort();
+    expect(props).toEqual(expect.arrayContaining(['label', 'href']));
+    expect(props).not.toContain('size');
+  });
+
+  it('does not treat colocated .test / .stories files as the source of truth', async () => {
+    const src = fixture({
+      'BaseProps.ts': BASE_PROPS,
+      'Widget/Widget.tsx': `
+        import type {BaseProps} from '../BaseProps';
+        export interface WidgetProps extends BaseProps {
+          label: string;
+        }
+      `,
+      'Widget/Widget.test.tsx': `
+        export interface WidgetProps { leakedFromTest: string }
+      `,
+      'Widget/Widget.stories.tsx': `
+        export interface WidgetProps { leakedFromStory: string }
+      `,
+      'Widget/Widget.doc.mjs': `
+        export const docs = {
+          name: 'Widget',
+          props: [{name: 'label', type: 'string', description: 'Visible text'}],
+        };
+      `,
+    });
+    const {missing} = await checkContract(src);
+    expect(missing.map(m => m.prop)).not.toEqual(
+      expect.arrayContaining(['leakedFromTest', 'leakedFromStory']),
+    );
+    expect(missing).toEqual([]);
+  });
+
+  it('checks inline components[].props against that sub-component, not the parent', async () => {
+    const src = fixture({
+      'BaseProps.ts': BASE_PROPS,
+      'Layout/Stack.tsx': `
+        import type {BaseProps} from '../BaseProps';
+        export interface StackProps extends BaseProps {
+          gap?: number;
+          direction?: string;
+        }
+      `,
+      'Layout/Layout.doc.mjs': `
+        export const docs = {
+          name: 'Layout',
+          components: [
+            {
+              name: 'Stack',
+              props: [{name: 'gap', type: 'number', description: 'Space between children'}],
+            },
+          ],
+        };
+      `,
+    });
+    const {missing} = await checkContract(src);
+    expect(missing).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({component: 'Stack', prop: 'direction'}),
+      ]),
+    );
+    expect(missing.map(m => m.component)).not.toContain('Layout');
+  });
+});
+
+describe('documentedPropNames / findUndocumented — empty and nameless input', () => {
+  it('returns an empty set for a missing or empty doc', () => {
+    expect(documentedPropNames(undefined)).toEqual(new Set());
+    expect(documentedPropNames({name: 'X'})).toEqual(new Set());
+  });
+
+  it('skips a props[] entry that has no name', () => {
+    expect(
+      documentedPropNames({
+        name: 'X',
+        props: [{type: 'string'}, {name: 'label'}],
+      }),
+    ).toEqual(new Set(['label']));
+  });
+
+  it('returns empty when the source side is empty, even if docs list extras', () => {
+    expect(findUndocumented([], ['label'])).toEqual([]);
+  });
 });
