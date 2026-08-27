@@ -147,6 +147,14 @@ describe('InputMask typing', () => {
   });
 });
 
+function setNativeValue(input: HTMLInputElement, value: string) {
+  // Bypass React's value tracker the way a real keystroke does.
+  Object.getOwnPropertyDescriptor(
+    HTMLInputElement.prototype,
+    'value',
+  )!.set!.call(input, value);
+}
+
 describe('InputMask deleting', () => {
   it('backspacing over a literal run deletes the digit before it', async () => {
     const user = userEvent.setup();
@@ -165,6 +173,35 @@ describe('InputMask deleting', () => {
       initialSelectionStart: 6,
       initialSelectionEnd: 6,
     });
+
+    expect(input).toHaveValue('(551) 23');
+    expect(onChange).toHaveBeenLastCalledWith('55123', expect.anything());
+    expect(input.selectionStart).toBe(3);
+  });
+
+  it('deletes through a literal from the input type alone, with no Backspace key', () => {
+    const onChange = vi.fn();
+    render(
+      <Controlled
+        mask={PHONE}
+        label="Phone"
+        initialValue="555123"
+        onChange={onChange}
+      />,
+    );
+    const input = getInput();
+
+    // Virtual keyboards report no key, but the input event still says what
+    // happened: the space after "(555)" was deleted backward.
+    setNativeValue(input, '(555)123-');
+    input.setSelectionRange(5, 5);
+    fireEvent(
+      input,
+      new InputEvent('input', {
+        bubbles: true,
+        inputType: 'deleteContentBackward',
+      }),
+    );
 
     expect(input).toHaveValue('(551) 23');
     expect(onChange).toHaveBeenLastCalledWith('55123', expect.anything());
@@ -355,27 +392,37 @@ describe('InputMask states', () => {
       />,
     );
     await user.click(screen.getByRole('button', {name: /clear phone/i}));
-    // The clear path passes null as the event, matching TextInput's contract.
-    expect(onChange).toHaveBeenLastCalledWith('', null);
+    // No ChangeEvent exists for a button click; the callback still gets the
+    // input as the event target, like composition end.
+    expect(onChange).toHaveBeenLastCalledWith(
+      '',
+      expect.objectContaining({target: getInput()}),
+    );
     expect(getInput()).toHaveValue('');
     expect(getInput()).toHaveFocus();
   });
 
-  it('fires onEnter on Enter and passes form plumbing through', async () => {
+  it('fires onEnter on Enter', async () => {
     const user = userEvent.setup();
     const onEnter = vi.fn();
-    render(
+    render(<Controlled mask={PHONE} label="Phone" onEnter={onEnter} />);
+    await user.type(getInput(), '{Enter}');
+    expect(onEnter).toHaveBeenCalledTimes(1);
+  });
+
+  it('posts the raw digits under htmlName through a hidden input', () => {
+    const {container} = render(
       <Controlled
         mask={PHONE}
         label="Phone"
-        onEnter={onEnter}
         htmlName="phone"
+        initialValue="5551234567"
       />,
     );
-    const input = getInput();
-    expect(input).toHaveAttribute('name', 'phone');
-    await user.type(input, '{Enter}');
-    expect(onEnter).toHaveBeenCalledTimes(1);
+    expect(
+      container.querySelector('input[type="hidden"][name="phone"]'),
+    ).toHaveValue('5551234567');
+    expect(getInput()).not.toHaveAttribute('name');
   });
 });
 
@@ -520,6 +567,28 @@ describe('InputMask uncontrolled', () => {
     expect(getInput()).toHaveFocus();
   });
 
+  it('runs changeAction on clear like any other edit', async () => {
+    const user = userEvent.setup();
+    const changeAction = vi.fn();
+    render(
+      <InputMask
+        mask={PHONE}
+        label="Phone"
+        hasClear
+        defaultValue="5551234567"
+        changeAction={changeAction}
+      />,
+    );
+
+    await user.click(screen.getByRole('button', {name: /clear phone/i}));
+
+    expect(changeAction).toHaveBeenCalledWith(
+      '',
+      expect.objectContaining({target: getInput()}),
+    );
+    expect(getInput()).toHaveValue('');
+  });
+
   it('keeps the typed value after changeAction settles and shows busy while pending', async () => {
     const user = userEvent.setup();
     let resolveAction: () => void = () => {};
@@ -563,5 +632,53 @@ describe('InputMask composition', () => {
     fireEvent.compositionEnd(input, {data: '123abc'});
     expect(input).toHaveValue('(123) ');
     expect(onChange).toHaveBeenLastCalledWith('123', expect.anything());
+  });
+});
+
+describe('InputMask patterns with literal digits', () => {
+  const COUNTRY_PHONE = {pattern: '(+1) ### ### ####'};
+
+  it('never reads a literal digit back as typed data', async () => {
+    const user = userEvent.setup();
+    const onChange = vi.fn();
+    render(
+      <Controlled mask={COUNTRY_PHONE} label="Phone" onChange={onChange} />,
+    );
+    const input = getInput();
+
+    await user.type(input, '55');
+
+    expect(input).toHaveValue('(+1) 55');
+    expect(onChange.mock.calls.map(call => call[0])).toEqual(['5', '55']);
+    expect(input.selectionStart).toBe(7);
+  });
+
+  it('pastes a formatted value that carries the literal digit', async () => {
+    const user = userEvent.setup();
+    const onChange = vi.fn();
+    render(
+      <Controlled mask={COUNTRY_PHONE} label="Phone" onChange={onChange} />,
+    );
+    const input = getInput();
+
+    await user.click(input);
+    await user.paste('(+1) 555 123 4567');
+
+    expect(input).toHaveValue('(+1) 555 123 4567');
+    expect(onChange).toHaveBeenLastCalledWith('5551234567', expect.anything());
+  });
+
+  it('keeps the caret before the first slot after deleting the first digit', async () => {
+    const user = userEvent.setup();
+    render(<Controlled mask={COUNTRY_PHONE} label="Phone" initialValue="55" />);
+    const input = getInput();
+
+    await user.type(input, '{Backspace}', {
+      initialSelectionStart: 6,
+      initialSelectionEnd: 6,
+    });
+
+    expect(input).toHaveValue('(+1) 5');
+    expect(input.selectionStart).toBe(5);
   });
 });

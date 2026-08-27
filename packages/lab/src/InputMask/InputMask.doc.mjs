@@ -23,7 +23,7 @@ export const docs = {
       name: 'mask',
       type: '{pattern: string, placeholder?: string}',
       description:
-        "The mask to apply: a pattern where `#` marks a digit slot and every other character is inserted literally (e.g. {pattern: '###-##-####'}). placeholder sets the ghost character for unfilled slots.",
+        "The mask to apply: a pattern where `#` marks a digit slot and every other character is inserted literally (e.g. {pattern: '###-##-####'}). Literals may be digits too ('(+1) ### ### ####'); they are never read back as typed data. placeholder sets the ghost character for unfilled slots.",
       required: true,
     },
     {
@@ -104,7 +104,7 @@ export const docs = {
       name: 'isReadOnly',
       type: 'boolean',
       description:
-        'Read-only: the formatted value stays visible and submits, but cannot be edited.',
+        'Read-only: the formatted value stays visible and the raw digits still submit, but nothing can be edited.',
       default: 'false',
     },
     {
@@ -165,7 +165,7 @@ export const docs = {
       name: 'htmlName',
       type: 'string',
       description:
-        'HTML name attribute for form submission. Note: the submitted value is the formatted display string.',
+        'HTML name attribute for form submission. A hidden input posts the raw digits, the same string onChange receives, never the formatted display.',
     },
     {
       name: 'onEnter',
@@ -340,6 +340,8 @@ export const docsDense = {
       "Auto 'Format: (555) 555-5555' describedby hint; string replaces, false omits.",
     autoComplete: "Autocomplete attribute; default 'off'.",
     hasClear: 'Clear button when value set; clears and refocuses.',
+    htmlName:
+      'Form name; a hidden input posts the raw digits, not the display.',
     status:
       'Validation status; error sets aria-invalid; message joins aria-describedby.',
     size: "Input size 'sm'|'md'|'lg'.",

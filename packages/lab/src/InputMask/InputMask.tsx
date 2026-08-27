@@ -16,7 +16,6 @@
  */
 
 import {
-  useCallback,
   useId,
   useLayoutEffect,
   useOptimistic,
@@ -60,15 +59,37 @@ import {
 import {VisuallyHidden} from '@astryxdesign/core/VisuallyHidden';
 
 import {
-  caretForRawIndex,
+  clampRaw,
   formatRaw,
   ghostRemainder,
   maxRawLength,
-  rawIndexForCaret,
+  resolveEdit,
   resolveMask,
-  stripToRaw,
+  type DeleteDirection,
   type MaskProp,
 } from './maskEngine';
+
+/** The deletion an input event performed, if it was one. */
+function deleteDirectionOf(inputType: string | undefined): DeleteDirection {
+  if (inputType?.endsWith('Backward')) {
+    return 'backward';
+  }
+  if (inputType?.endsWith('Forward')) {
+    return 'forward';
+  }
+  return null;
+}
+
+/**
+ * Clear and composition end deliver no ChangeEvent; hand the callbacks the
+ * input element under the same contract.
+ */
+function changeEventFor(el: HTMLInputElement): ChangeEvent<HTMLInputElement> {
+  return {
+    target: el,
+    currentTarget: el,
+  } as unknown as ChangeEvent<HTMLInputElement>;
+}
 
 const styles = stylex.create({
   inner: {
@@ -95,7 +116,7 @@ const styles = stylex.create({
     outline: 'none',
   },
   inputDisabled: {
-    cursor: 'not-allowed',
+    cursor: 'default',
   },
   // The ghost track overlays the input box and must use identical text
   // metrics (font, size incl. the coarse-pointer bump, leading) so the
@@ -146,7 +167,8 @@ export interface InputMaskProps extends Omit<
   ref?: React.Ref<HTMLInputElement>;
   /**
    * The mask to apply: a pattern where `#` marks a digit slot and every
-   * other character is inserted literally.
+   * other character is inserted literally. Literals may be digits too
+   * (`'(+1) ### ### ####'`); they are never read back as typed data.
    */
   mask: MaskProp;
   /**
@@ -214,7 +236,7 @@ export interface InputMaskProps extends Omit<
   hasClear?: boolean;
   /** Whether to autofocus the input on mount. @default false */
   hasAutoFocus?: boolean;
-  /** The HTML name attribute for form submission. */
+  /** The HTML name attribute for form submission; posts the raw digits, like `value`. */
   htmlName?: string;
   /** Fired when the user presses Enter. */
   onEnter?: () => void;
@@ -273,7 +295,7 @@ export function InputMask({
   // wins. Both routes clamp at read so a later mask change re-clamps them.
   const [internalRaw, setInternalRaw] = useState(() => defaultValue ?? '');
   const isControlled = value !== undefined;
-  const rawValue = stripToRaw(def, isControlled ? value : internalRaw);
+  const rawValue = clampRaw(def, isControlled ? value : internalRaw);
 
   const id = useId();
   const inputLabelID = useId();
@@ -284,7 +306,6 @@ export function InputMask({
   const inputRef = useRef<HTMLInputElement | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
   const caretTargetRef = useRef<number | null>(null);
-  const lastKeyRef = useRef<string | null>(null);
   const isComposingRef = useRef(false);
   const [editSeq, setEditSeq] = useState(0);
   const [compositionText, setCompositionText] = useState<string | null>(null);
@@ -363,46 +384,38 @@ export function InputMask({
     }
   };
 
+  // Resolve what the browser did to the display against what the mask
+  // rendered, then restore the caret once the re-formatted value is in.
+  const applyEdit = (
+    el: HTMLInputElement,
+    e: ChangeEvent<HTMLInputElement>,
+    deleteDirection: DeleteDirection = null,
+  ) => {
+    const edit = resolveEdit(
+      def,
+      displayed,
+      el.value,
+      el.selectionStart ?? el.value.length,
+      deleteDirection,
+    );
+    caretTargetRef.current = edit.caret;
+    setEditSeq(seq => seq + 1);
+    if (edit.raw !== optimisticRaw) {
+      commitRaw(edit.raw, e);
+    }
+  };
+
   const handleChange = (e: ChangeEvent<HTMLInputElement>) => {
     if (isDisabled || isReadOnly) {
       return;
     }
     const el = e.target;
-    if (isComposingRef.current || (e.nativeEvent as InputEvent).isComposing) {
+    const native = e.nativeEvent as InputEvent;
+    if (isComposingRef.current || native.isComposing) {
       setCompositionText(el.value);
       return;
     }
-    const displayNew = el.value;
-    const selStart = el.selectionStart ?? displayNew.length;
-    let nextRaw = stripToRaw(def, displayNew);
-    let targetRawIndex = rawIndexForCaret(displayNew, selStart);
-
-    // A deletion that removed only literal characters leaves the digits
-    // unchanged; the user meant to delete through them. Remove the digit
-    // adjacent to the caret in the deletion's direction instead.
-    if (nextRaw === optimisticRaw && displayNew.length < displayed.length) {
-      if (lastKeyRef.current === 'Backspace' && targetRawIndex > 0) {
-        nextRaw =
-          optimisticRaw.slice(0, targetRawIndex - 1) +
-          optimisticRaw.slice(targetRawIndex);
-        targetRawIndex -= 1;
-      } else if (
-        lastKeyRef.current === 'Delete' &&
-        targetRawIndex < optimisticRaw.length
-      ) {
-        nextRaw =
-          optimisticRaw.slice(0, targetRawIndex) +
-          optimisticRaw.slice(targetRawIndex + 1);
-      }
-    }
-
-    targetRawIndex = Math.min(targetRawIndex, nextRaw.length);
-    caretTargetRef.current = caretForRawIndex(def, targetRawIndex);
-    setEditSeq(seq => seq + 1);
-
-    if (nextRaw !== optimisticRaw) {
-      commitRaw(nextRaw, e);
-    }
+    applyEdit(el, e, deleteDirectionOf(native.inputType));
   };
 
   const handleCompositionStart = () => {
@@ -417,26 +430,16 @@ export function InputMask({
       return;
     }
     const el = e.currentTarget;
-    const nextRaw = stripToRaw(def, el.value);
-    caretTargetRef.current = caretForRawIndex(def, nextRaw.length);
-    setEditSeq(seq => seq + 1);
-    if (nextRaw !== optimisticRaw) {
-      // Composition delivers no ChangeEvent; hand the callback the input
-      // element under the same contract (matches handleClear's cast).
-      commitRaw(nextRaw, {
-        target: el,
-        currentTarget: el,
-      } as unknown as ChangeEvent<HTMLInputElement>);
-    }
+    applyEdit(el, changeEventFor(el));
   };
 
-  const handleClear = useCallback(() => {
-    if (!isControlled) {
-      setInternalRaw('');
+  const handleClear = () => {
+    const el = inputRef.current;
+    if (el) {
+      commitRaw('', changeEventFor(el));
+      el.focus();
     }
-    onChange?.('', null as unknown as ChangeEvent<HTMLInputElement>);
-    inputRef.current?.focus();
-  }, [isControlled, onChange]);
+  };
 
   const {onClick: handleWrapperClick, onMouseUp: handleWrapperMouseUp} =
     useInputContainer({
@@ -480,7 +483,6 @@ export function InputMask({
           {...rest}
           ref={mergeRefs(ref, inputRef)}
           id={id}
-          name={isDisabled ? undefined : htmlName}
           type="text"
           value={shownValue}
           inputMode="numeric"
@@ -489,7 +491,6 @@ export function InputMask({
           onCompositionStart={handleCompositionStart}
           onCompositionEnd={handleCompositionEnd}
           onKeyDown={e => {
-            lastKeyRef.current = e.key;
             if (e.key === 'Enter') {
               onEnter?.();
             }
@@ -514,6 +515,9 @@ export function InputMask({
           </span>
         </div>
       </div>
+      {htmlName != null && !isDisabled && (
+        <input type="hidden" name={htmlName} value={rawValue} />
+      )}
       {hasClear && rawValue !== '' && !isDisabled && !isReadOnly && (
         <InputClearButton label={`Clear ${label}`} onClick={handleClear} />
       )}
