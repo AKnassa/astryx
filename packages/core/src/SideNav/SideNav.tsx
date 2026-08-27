@@ -24,6 +24,7 @@
 import {
   useCallback,
   useImperativeHandle,
+  useLayoutEffect,
   useRef,
   useState,
   type ReactNode,
@@ -34,6 +35,7 @@ import type {StyleXStyles} from '@stylexjs/stylex';
 import {durationVars, easeVars, spacingVars} from '../theme/tokens.stylex';
 import {mergeProps} from '../utils';
 import {
+  findExternalCollapseToggle,
   SideNavCollapseContext,
   type SideNavCollapseState,
   type SideNavCollapsibleConfig,
@@ -74,13 +76,44 @@ const styles = stylex.create({
   rootCollapsed: {
     width: spacingVars['--spacing-12'],
   },
-  rootAnimated: {
-    transitionProperty: 'width',
-    transitionDuration: durationVars['--duration-fast'],
+  // Fully-hidden collapse (`collapsedWidth: 0`) with `isAnimated`: only
+  // `transform` animates; `width` is layout-triggering and never tweens
+  // (motion convention; MobileNav's drawer is the precedent, RTL flip
+  // included). The slide layer carries the expanded content out through the
+  // root's overflow clip. The box itself holds its expanded width for exactly
+  // the slide, via a zero-duration width "transition" that is all delay, then
+  // snaps shut in one reflow. The expanded state declares no width transition,
+  // so expanding snaps the box open at once and the layer slides back in.
+  // Interrupts are safe: re-expanding mid-slide cancels the pending snap (the
+  // width never moved) and the transform reverses from wherever it was, with
+  // no JS and no transitionend to race.
+  slideLayer: {
+    display: 'flex',
+    flexDirection: 'column',
+    height: '100%',
+    width: '100%',
+    backgroundColor: 'inherit',
+    transform: 'translateX(0)',
+    transitionProperty: 'transform',
+    transitionDuration: {
+      default: durationVars['--duration-fast'],
+      '@media (prefers-reduced-motion: reduce)': '0s',
+    },
     transitionTimingFunction: easeVars['--ease-standard'],
-    // Honour a reduced-motion preference: snap instead of slide.
-    '@media (prefers-reduced-motion: reduce)': {
-      transitionDuration: '0s',
+  },
+  slideLayerHidden: {
+    transform: {
+      default: 'translateX(-100%)',
+      ':is([dir="rtl"] *)': 'translateX(100%)',
+    },
+  },
+  rootSlideCollapse: {
+    transitionProperty: 'width',
+    transitionDuration: '0s',
+    // Must equal the slide's duration: the box holds until the layer is out.
+    transitionDelay: {
+      default: durationVars['--duration-fast'],
+      '@media (prefers-reduced-motion: reduce)': '0s',
     },
   },
   stickyTop: {
@@ -297,8 +330,10 @@ export interface SideNavProps extends BaseProps<HTMLElement> {
    *   - `hasButton` — render built-in collapse button (default: true)
    *   - `buttonLabel` — accessibility label for the collapse button
    *   - `collapsedWidth` — collapsed width in px. Defaults to the icon rail;
-   *     `0` hides the nav entirely (and makes it `inert`)
-   *   - `isAnimated` — animate the width change
+   *     `0` hides the nav entirely (`inert`, with focus parked on an outside
+   *     `SideNavCollapseButton` first)
+   *   - `isAnimated` — slide the content out and back in when collapsing to
+   *     `collapsedWidth: 0`; only `transform` animates
    *
    * @default false
    */
@@ -371,6 +406,50 @@ export function SideNav({
     isCollapsible,
   });
 
+  // Fully-hidden mode (`collapsedWidth: 0`) has no visible collapsed UI, so
+  // its content keeps the expanded layout: the rail's icon-only morph would be
+  // pointless invisible work, and the slide has to carry the expanded panel
+  // out and back in without a re-layout.
+  const isHiddenMode = collapsedWidth === 0;
+  // A nav collapsed to zero width is invisible but still in the DOM, so its
+  // links would keep taking keyboard focus and stay in the a11y tree. `inert`
+  // removes both. The icon rail is *visible*, so it stays interactive.
+  const isFullyHidden = collapsed && isHiddenMode;
+  // Collapsed to something visible: the icon rail's icon-only layout.
+  const isRailCollapsed = collapsed && !isHiddenMode;
+  const isSlideAnimated = isCollapsible && isAnimated && isHiddenMode;
+
+  // `inert` must never land while focus is inside the nav: an inert ancestor
+  // yanks focus to <body> at once, before the slide has shown anything. So the
+  // first fully-hidden render leaves inert off, a pre-paint layout effect
+  // parks focus deliberately (on a collapse toggle rendered outside the nav
+  // when there is one, else an explicit blur), and inert lands in the
+  // synchronous follow-up commit, still before paint. Seeding from
+  // isFullyHidden keeps inert in server-rendered markup for navs that start
+  // collapsed.
+  const [isInertApplied, setIsInertApplied] = useState(isFullyHidden);
+  if (!isFullyHidden && isInertApplied) {
+    // Expanding: drop inert in this same render so links are focusable again.
+    setIsInertApplied(false);
+  }
+  useLayoutEffect(() => {
+    if (!isFullyHidden || isInertApplied) {
+      return;
+    }
+    const nav = navRef.current;
+    const active = document.activeElement;
+    if (nav != null && active instanceof HTMLElement && nav.contains(active)) {
+      const toggle = findExternalCollapseToggle(nav);
+      if (toggle != null) {
+        toggle.focus();
+      } else {
+        active.blur();
+      }
+    }
+    // eslint-disable-next-line @eslint-react/set-state-in-effect -- inert has to land in the commit right after focus is parked, before paint
+    setIsInertApplied(true);
+  }, [isFullyHidden, isInertApplied]);
+
   const setCollapsedState = useCallback(
     (value: boolean) => {
       if (!isControlled) {
@@ -421,8 +500,13 @@ export function SideNav({
     isCollapsible,
   };
 
+  // Children read this for their collapsed (icon-rail) form, which only
+  // exists for a *visible* collapsed nav: hidden mode reports expanded so the
+  // content keeps its layout while it slides. The deprecated handle's
+  // snapshot above keeps the real state; the outside button's label and
+  // chevron come from it.
   const collapseContext = {
-    isCollapsed: collapsed,
+    isCollapsed: isRailCollapsed,
     toggle,
     isCollapsible,
   };
@@ -547,35 +631,13 @@ export function SideNav({
       ? {...(style ?? {}), width: navWidth}
       : style;
 
-  // A nav collapsed to zero width is invisible but still in the DOM, so its
-  // links would keep taking keyboard focus and stay in the a11y tree. `inert`
-  // removes both. The icon rail is *visible*, so it stays interactive.
-  const isFullyHidden = collapsed && collapsedWidth === 0;
-
-  const navElement = (
-    <nav
-      ref={mergedNavRef}
-      role="navigation"
-      aria-label={t('@astryx.sideNav.label')}
-      data-testid={testId}
-      inert={isFullyHidden || undefined}
-      {...mergeProps(
-        themeProps('side-nav'),
-        stylex.props(
-          styles.root,
-          collapsed && styles.rootCollapsed,
-          isAnimated && styles.rootAnimated,
-          xstyle,
-        ),
-        className,
-        navStyle,
-      )}
-      {...props}>
+  const zones = (
+    <>
       {hasStickyTop && (
         <div
           {...stylex.props(
             styles.stickyTop,
-            collapsed && styles.stickyTopCollapsed,
+            isRailCollapsed && styles.stickyTopCollapsed,
           )}>
           {header}
           {topContent && (
@@ -586,7 +648,7 @@ export function SideNav({
       <div
         {...stylex.props(
           styles.scrollable,
-          collapsed && styles.scrollableCollapsed,
+          isRailCollapsed && styles.scrollableCollapsed,
           hasStickyTop ? styles.scrollableWithTop : styles.scrollableNoTop,
           hasStickyBottom
             ? styles.scrollableWithBottom
@@ -598,13 +660,13 @@ export function SideNav({
         <div
           {...stylex.props(
             styles.stickyBottom,
-            collapsed && styles.stickyBottomCollapsed,
+            isRailCollapsed && styles.stickyBottomCollapsed,
           )}>
           {footer}
           <div
             {...stylex.props(
               styles.footerRow,
-              collapsed && styles.footerRowCollapsed,
+              isRailCollapsed && styles.footerRowCollapsed,
             )}>
             <SizeProvider value={FOOTER_ICON_SIZE}>
               {showCollapseButton && <SideNavCollapseButton />}
@@ -612,6 +674,40 @@ export function SideNav({
             </SizeProvider>
           </div>
         </div>
+      )}
+    </>
+  );
+
+  const navElement = (
+    <nav
+      ref={mergedNavRef}
+      role="navigation"
+      aria-label={t('@astryx.sideNav.label')}
+      data-testid={testId}
+      inert={(isFullyHidden && isInertApplied) || undefined}
+      {...mergeProps(
+        themeProps('side-nav'),
+        stylex.props(
+          styles.root,
+          isRailCollapsed && styles.rootCollapsed,
+          isSlideAnimated && collapsed && styles.rootSlideCollapse,
+          xstyle,
+        ),
+        className,
+        navStyle,
+      )}
+      {...props}>
+      {isSlideAnimated ? (
+        // The slab the slide moves; see `slideLayer`.
+        <div
+          {...stylex.props(
+            styles.slideLayer,
+            collapsed && styles.slideLayerHidden,
+          )}>
+          {zones}
+        </div>
+      ) : (
+        zones
       )}
     </nav>
   );

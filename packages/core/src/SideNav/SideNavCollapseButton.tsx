@@ -24,7 +24,9 @@ import {Icon} from '../Icon';
 import {Button} from '../Button';
 import type {BaseProps} from '../BaseProps';
 import {composeEventHandlers, rtlStyles} from '../utils';
+import {useMergedRefs} from '../hooks/useMergedRefs';
 import {
+  registerExternalCollapseToggle,
   useSideNavCollapse,
   type SideNavCollapseState,
   type SideNavControlledCollapsible,
@@ -145,6 +147,20 @@ export function SideNavCollapseButton({
   );
   const {isMobile} = useAppShellMobile();
 
+  // Rendered outside a SideNav, this button is where focus is parked when a
+  // fully-hidden collapse (`collapsedWidth: 0`) starts with focus still inside
+  // the nav; see SideNav. The in-nav button reads context instead and goes
+  // inert with the rest of the nav, so it never registers.
+  const isOutsideNav = collapsible != null || handleRef != null;
+  const registerRef = useCallback(
+    (element: HTMLButtonElement | null) =>
+      element != null && isOutsideNav
+        ? registerExternalCollapseToggle(element)
+        : undefined,
+    [isOutsideNav],
+  );
+  const mergedRef = useMergedRefs(ref, registerRef);
+
   // Hide when not collapsible, or when in mobile mode (sidenav is in
   // the mobile drawer — collapse doesn't apply there)
   if (!isCollapsible || isMobile) {
@@ -153,7 +169,7 @@ export function SideNavCollapseButton({
 
   return (
     <Button
-      ref={ref}
+      ref={mergedRef}
       label={
         label ??
         (isCollapsed
