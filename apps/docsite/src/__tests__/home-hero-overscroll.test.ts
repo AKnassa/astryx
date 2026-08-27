@@ -115,24 +115,202 @@ function allValues(block: string, property: string): string[] {
   });
 }
 
-describe('docsite globals.css never suppresses overscroll (#5392, #5470)', () => {
-  it('has no overscroll-behavior declaration other than auto, at any width', () => {
-    const css = stripComments(read(path.join(APP, 'globals.css')));
-    const offenders: string[] = [];
-    for (const match of css.matchAll(
-      /overscroll-behavior(?:-x|-y|-block|-inline)?\s*:\s*([^;}]+)/gi,
-    )) {
-      const value = match[1].trim();
-      if (value !== 'auto') {
-        // Name the enclosing at-rule so a re-scoped rule is still reported.
-        const before = css.slice(0, match.index);
-        const atRule = /@media[^{]*\{(?:[^{}]|\{[^{}]*\})*$/.exec(before)?.[0];
-        offenders.push(
-          `${atRule ? atRule.split('{')[0].trim() + ' > ' : ''}overscroll-behavior: ${value}`,
-        );
-      }
+/**
+ * The open `{` preludes (at-rules and selectors, outermost first) enclosing
+ * `index`. Enough of a CSS parser for a source invariant: the input is
+ * comment-stripped and holds no braces inside strings.
+ */
+function enclosingPreludes(css: string, index: number): string[] {
+  const stack: string[] = [];
+  let prelude = '';
+  for (let i = 0; i < index; i++) {
+    const char = css[i];
+    if (char === '{') {
+      stack.push(prelude.trim());
+      prelude = '';
+    } else if (char === '}') {
+      stack.pop();
+      prelude = '';
+    } else if (char === ';') {
+      prelude = '';
+    } else {
+      prelude += char;
     }
-    expect(offenders).toEqual([]);
+  }
+  return stack;
+}
+
+/** Split `text` on `separator` characters that sit outside parentheses. */
+function splitTopLevel(text: string, separator: RegExp): string[] {
+  const parts: string[] = [];
+  let depth = 0;
+  let current = '';
+  for (const char of text) {
+    if (char === '(') {
+      depth++;
+    } else if (char === ')') {
+      depth--;
+    }
+    if (depth === 0 && separator.test(char)) {
+      if (current) {
+        parts.push(current);
+      }
+      current = '';
+    } else {
+      current += char;
+    }
+  }
+  if (current) {
+    parts.push(current);
+  }
+  return parts;
+}
+
+/**
+ * Whether a selector list targets the page itself. `overscroll-behavior`
+ * reaches the viewport (pull-to-refresh, the trackpad rubber-band) only from
+ * the root element: `html` / `:root`, or `body`, whose value browsers
+ * propagate when the root's is `auto`; `*` covers both. `:is()` and
+ * `:where()` are looked through.
+ */
+function isPageWide(selectorList: string): boolean {
+  return splitTopLevel(selectorList, /,/).some(selector => {
+    const compounds = splitTopLevel(selector.trim(), /[\s>+~]/);
+    const subject = compounds[compounds.length - 1] ?? '';
+    const wrapped = /^:(?:is|where)\((.*)\)$/i.exec(subject);
+    if (wrapped) {
+      return isPageWide(wrapped[1]);
+    }
+    return /^(?:html|body|:root|\*)(?![\w-])/i.test(subject);
+  });
+}
+
+/**
+ * Every non-`auto` `overscroll-behavior` declaration in `css` whose selector
+ * is page-wide, labelled with its enclosing at-rules and selector so a
+ * re-scoped rule is still reported. Only declarations count (the property
+ * inside an `@supports` prelude is not one). `contain` on a nested scroller
+ * only stops that box's scroll from chaining outward, so it is legitimate and
+ * not reported.
+ */
+function pageWideOverscrollSuppressions(css: string): string[] {
+  const offenders: string[] = [];
+  for (const match of css.matchAll(
+    /(?<=[{;]\s*)(overscroll-behavior(?:-x|-y|-block|-inline)?)\s*:\s*([^;{}]+)/gi,
+  )) {
+    const property = match[1].toLowerCase();
+    const value = match[2].trim();
+    if (value === 'auto') {
+      continue;
+    }
+    const preludes = enclosingPreludes(css, match.index);
+    const atRules = preludes.filter(p => p.startsWith('@'));
+    const selectors = preludes.filter(p => !p.startsWith('@'));
+    const selector = selectors[selectors.length - 1] ?? '';
+    if (!isPageWide(selector)) {
+      continue;
+    }
+    offenders.push(
+      `${[...atRules, selector].join(' > ')} { ${property}: ${value} }`,
+    );
+  }
+  return offenders;
+}
+
+describe('docsite globals.css never suppresses overscroll (#5392, #5470)', () => {
+  it('never sets overscroll-behavior on html, :root, body or * away from auto, at any width', () => {
+    const css = stripComments(read(path.join(APP, 'globals.css')));
+    expect(pageWideOverscrollSuppressions(css)).toEqual([]);
+  });
+});
+
+/**
+ * The guard's own contract, on fixtures: it must keep catching the root-level
+ * rule this change deletes, inside any at-rule, and it must not reject
+ * scroll-chaining control on a nested scroller.
+ */
+describe('the globals.css overscroll guard', () => {
+  it('reports a suppression on html inside a media query, naming the at-rule', () => {
+    const css = `
+@media (min-width: 1024px) {
+  html {
+    overscroll-behavior-y: none;
+  }
+}
+`;
+    expect(pageWideOverscrollSuppressions(css)).toEqual([
+      '@media (min-width: 1024px) > html { overscroll-behavior-y: none }',
+    ]);
+  });
+
+  it('reports contain on :root and a longhand on body', () => {
+    const css = `
+:root {
+  overscroll-behavior: contain;
+}
+body {
+  overscroll-behavior-x: none;
+}
+`;
+    expect(pageWideOverscrollSuppressions(css)).toEqual([
+      ':root { overscroll-behavior: contain }',
+      'body { overscroll-behavior-x: none }',
+    ]);
+  });
+
+  it('looks through :is() and :where() to the page-wide selector inside', () => {
+    const css = `
+:is(html, body) {
+  overscroll-behavior: none;
+}
+`;
+    expect(pageWideOverscrollSuppressions(css)).toEqual([
+      ':is(html, body) { overscroll-behavior: none }',
+    ]);
+  });
+
+  it('matches selectors case-insensitively, as CSS does', () => {
+    const css = `
+HTML {
+  OVERSCROLL-BEHAVIOR-Y: NONE;
+}
+:ROOT {
+  overscroll-behavior: contain;
+}
+`;
+    expect(pageWideOverscrollSuppressions(css)).toEqual([
+      'HTML { overscroll-behavior-y: NONE }',
+      ':ROOT { overscroll-behavior: contain }',
+    ]);
+  });
+
+  it('is not fooled by the property inside an @supports prelude', () => {
+    const css = `
+@supports (overscroll-behavior: none) {
+  html {
+    overscroll-behavior: none;
+  }
+}
+`;
+    expect(pageWideOverscrollSuppressions(css)).toEqual([
+      '@supports (overscroll-behavior: none) > html { overscroll-behavior: none }',
+    ]);
+  });
+
+  it('allows contain on nested scrollers, under html and inside :where() too', () => {
+    const css = `
+.dialog-body {
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+html .sheet {
+  overscroll-behavior: contain;
+}
+:where(.sheet) {
+  overscroll-behavior-y: none;
+}
+`;
+    expect(pageWideOverscrollSuppressions(css)).toEqual([]);
   });
 });
 
