@@ -18,7 +18,7 @@
  * - /packages/core/src/SideNav/SideNav.test.tsx
  * - /packages/core/src/SideNav/index.ts
  * - /apps/storybook/stories/SideNav.stories.tsx
- * - /packages/cli/templates/blocks/components/SideNav/ (showcase blocks)
+ * - /packages/cli/assets/templates/blocks/components/SideNav/ (showcase blocks)
  */
 
 import {
@@ -31,17 +31,12 @@ import {
 import type {BaseProps} from '../BaseProps';
 import * as stylex from '@stylexjs/stylex';
 import type {StyleXStyles} from '@stylexjs/stylex';
-import {
-  borderVars,
-  colorVars,
-  durationVars,
-  easeVars,
-  spacingVars,
-} from '../theme/tokens.stylex';
-import {mergeProps, mergeRefs} from '../utils';
+import {durationVars, easeVars, spacingVars} from '../theme/tokens.stylex';
+import {mergeProps} from '../utils';
 import {
   SideNavCollapseContext,
   type SideNavCollapseState,
+  type SideNavCollapsibleConfig,
   type SideNavImperativeCollapseHandle,
 } from './SideNavCollapseContext';
 import {SideNavCollapseButton} from './SideNavCollapseButton';
@@ -51,7 +46,10 @@ import {useResizable} from '../Resizable/useResizable';
 import type {ResizableConfig} from '../Resizable/useResizable';
 import {ResizeHandle} from '../Resizable/ResizeHandle';
 import {themeProps} from '../utils/themeProps';
+import {SizeProvider} from '../SizeContext/SizeContext';
+import {useTranslator} from '../i18n';
 
+import {useMergedRefs} from '../hooks/useMergedRefs';
 // =============================================================================
 // Constants
 // =============================================================================
@@ -137,9 +135,6 @@ const styles = stylex.create({
     paddingInline: spacingVars['--spacing-2'],
     paddingBlockStart: spacingVars['--spacing-1'],
     paddingBlockEnd: spacingVars['--spacing-2'],
-    borderBlockStartWidth: borderVars['--border-width'],
-    borderBlockStartStyle: 'solid',
-    borderBlockStartColor: colorVars['--color-border'],
   },
   footerRow: {
     display: 'flex',
@@ -159,8 +154,8 @@ const styles = stylex.create({
     alignItems: 'center',
   },
   stickyBottomCollapsed: {
-    borderBlockStart: 'none',
     paddingBlockStart: 0,
+    alignItems: 'center',
   },
   // Drawer footer — pushed to bottom of the scrollable content area
   drawerFooter: {
@@ -169,9 +164,6 @@ const styles = stylex.create({
     marginBlockStart: 'auto',
     gap: spacingVars['--spacing-2'],
     paddingBlockStart: spacingVars['--spacing-2'],
-    borderBlockStartWidth: borderVars['--border-width'],
-    borderBlockStartStyle: 'solid',
-    borderBlockStartColor: colorVars['--color-border'],
   },
   drawerFooterIcons: {
     display: 'flex',
@@ -205,6 +197,13 @@ const styles = stylex.create({
   },
 });
 
+/**
+ * Cascaded to the icon rows through `SizeContext` so the built-in collapse
+ * button and the consumer's `footerIcons` come out one height. An explicit
+ * `size` on a child still wins.
+ */
+const FOOTER_ICON_SIZE = 'sm';
+
 // =============================================================================
 // Types
 // =============================================================================
@@ -217,6 +216,9 @@ export interface SideNavProps extends BaseProps<HTMLElement> {
    * Imperative collapse handle for SideNavCollapseButton instances rendered
    * outside this SideNav. This intentionally stays separate from `ref`, which
    * continues to expose the root HTMLElement.
+   *
+   * @deprecated Hand the same controlled `collapsible` config to SideNav and
+   * to the outside button instead.
    */
   handleRef?: React.Ref<SideNavImperativeCollapseHandle>;
 
@@ -290,28 +292,17 @@ export interface SideNavProps extends BaseProps<HTMLElement> {
    * - `true` — enables collapse with default toggle button and uncontrolled state
    * - Object — enables collapse with advanced configuration:
    *   - `defaultIsCollapsed` — start collapsed (uncontrolled)
-   *   - `isCollapsed` + `onCollapsedChange` — controlled mode
+   *   - `isCollapsed` + `onCollapsedChange` — controlled mode. Pass the same
+   *     object to a `SideNavCollapseButton` rendered outside this SideNav
    *   - `hasButton` — render built-in collapse button (default: true)
    *   - `buttonLabel` — accessibility label for the collapse button
+   *   - `collapsedWidth` — collapsed width in px. Defaults to the icon rail;
+   *     `0` hides the nav entirely (and makes it `inert`)
+   *   - `isAnimated` — animate the width change
    *
    * @default false
    */
-  collapsible?:
-    | boolean
-    | {
-        defaultIsCollapsed?: boolean;
-        isCollapsed?: boolean;
-        onCollapsedChange?: (isCollapsed: boolean) => void;
-        hasButton?: boolean;
-        buttonLabel?: string;
-        /** Width (px) of the collapsed nav. Defaults to the icon rail.
-         *  `0` hides it entirely — for focused single-pane UIs (e.g. chat)
-         *  where the rail is not wanted. A fully hidden nav is also made
-         *  `inert`, so its links can't take keyboard focus while invisible. */
-        collapsedWidth?: number;
-        /** Animate the width change between expanded and collapsed. */
-        isAnimated?: boolean;
-      };
+  collapsible?: boolean | SideNavCollapsibleConfig;
 }
 
 // =============================================================================
@@ -352,6 +343,7 @@ export function SideNav({
   handleRef,
   ...props
 }: SideNavProps) {
+  const t = useTranslator();
   // Parse collapsible prop
   const collapsibleConfig = typeof collapsible === 'object' ? collapsible : {};
   const isCollapsible = !!collapsible;
@@ -372,6 +364,7 @@ export function SideNav({
     useState(defaultIsCollapsed);
   const collapsed = isControlled ? controlledCollapsed : uncontrolledCollapsed;
   const navRef = useRef<HTMLElement>(null);
+  const mergedNavRef = useMergedRefs(ref, navRef);
   const collapseStateRef = useRef<SideNavCollapseState>({
     isCollapsed: collapsed,
     toggle: () => {},
@@ -403,6 +396,8 @@ export function SideNav({
   const toggle = useCallback(() => {
     const next = !collapsed;
 
+    // Deprecated `handleRef` path only: an out-of-tree button reads this
+    // snapshot while rendering, which can happen before SideNav re-renders.
     collapseStateRef.current = {
       ...collapseStateRef.current,
       isCollapsed: next,
@@ -457,7 +452,9 @@ export function SideNav({
           style,
         )}>
         {header}
-        <div {...stylex.props(styles.topbarIcons)}>{footerIcons}</div>
+        <div {...stylex.props(styles.topbarIcons)}>
+          <SizeProvider value={FOOTER_ICON_SIZE}>{footerIcons}</SizeProvider>
+        </div>
       </div>
     );
   }
@@ -469,7 +466,13 @@ export function SideNav({
 
   if (renderMode === 'drawer') {
     return (
-      <MobileNav header={header} data-testid={testId}>
+      <MobileNav
+        header={header}
+        data-testid={testId}
+        xstyle={xstyle}
+        className={className}
+        style={style}
+        {...props}>
         {topContent}
         {children}
         {hasDrawerFooter && (
@@ -477,7 +480,9 @@ export function SideNav({
             {footer}
             {footerIcons && (
               <div {...stylex.props(styles.drawerFooterIcons)}>
-                {footerIcons}
+                <SizeProvider value={FOOTER_ICON_SIZE}>
+                  {footerIcons}
+                </SizeProvider>
               </div>
             )}
           </div>
@@ -500,7 +505,9 @@ export function SideNav({
             {footer}
             {footerIcons && (
               <div {...stylex.props(styles.drawerFooterIcons)}>
-                {footerIcons}
+                <SizeProvider value={FOOTER_ICON_SIZE}>
+                  {footerIcons}
+                </SizeProvider>
               </div>
             )}
           </div>
@@ -547,9 +554,9 @@ export function SideNav({
 
   const navElement = (
     <nav
-      ref={mergeRefs(ref, navRef)}
+      ref={mergedNavRef}
       role="navigation"
-      aria-label="Side navigation"
+      aria-label={t('@astryx.sideNav.label')}
       data-testid={testId}
       inert={isFullyHidden || undefined}
       {...mergeProps(
@@ -599,8 +606,10 @@ export function SideNav({
               styles.footerRow,
               collapsed && styles.footerRowCollapsed,
             )}>
-            {showCollapseButton && <SideNavCollapseButton />}
-            {footerIcons}
+            <SizeProvider value={FOOTER_ICON_SIZE}>
+              {showCollapseButton && <SideNavCollapseButton />}
+              {footerIcons}
+            </SizeProvider>
           </div>
         </div>
       )}
@@ -620,7 +629,7 @@ export function SideNav({
         pillPlacement="end"
         isAlwaysVisible={false}
         resizable={resizableHook.props}
-        label="Resize sidebar"
+        label={t('@astryx.sideNav.resizeSidebar')}
       />
     </div>
   ) : (

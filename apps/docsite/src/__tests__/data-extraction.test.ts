@@ -21,6 +21,7 @@ import {blocks, blockCount, showcaseCount} from '../generated/blockRegistry';
 import {templates, templateCount} from '../generated/templateRegistry';
 import {docTopics, docsCount} from '../generated/docsRegistry';
 import {showcaseRegistry} from '../generated/showcaseRegistry';
+import {eagerShowcases} from '../components/eagerShowcases';
 import {exampleRegistry} from '../generated/exampleRegistry';
 
 const REPO_ROOT = path.resolve(
@@ -307,6 +308,50 @@ describe('componentRegistry', () => {
     expect(metadataListItem!.playground?.wrapper).toMatchObject({
       component: 'MetadataList',
     });
+  });
+
+  it('Lightbox declares an overlay playground with a closed initial state (#3657)', () => {
+    const core = components['@astryxdesign/core'];
+    const lightbox = core.find(c => c.name === 'Lightbox');
+    expect(lightbox).toBeDefined();
+    // Lightbox opens via showModal() and renders nothing while closed; without
+    // overlay mode the properties tab is an empty stage on load.
+    expect(lightbox!.playground?.overlay).toBe(true);
+    expect(lightbox!.playground?.defaults).toMatchObject({
+      isOpen: false,
+      media: {
+        src: expect.stringContaining('/template-assets/'),
+        alt: expect.any(String),
+      },
+    });
+  });
+
+  it('MobileNavToggle declares an appShellMobile playground so its preview is not empty (#4983)', () => {
+    const core = components['@astryxdesign/core'];
+    const toggle = core.find(c => c.name === 'MobileNavToggle');
+    expect(toggle).toBeDefined();
+    // The toggle reads AppShell mobile context and renders null without it;
+    // appShellMobile makes the preview provide a simulated mobile context.
+    expect(toggle!.playground?.appShellMobile).toBe(true);
+    // The drawer's overlay playground stays on the MobileNav entry only —
+    // the toggle renders inline and must not inherit the overlay placeholder.
+    expect(toggle!.playground?.overlay).toBeUndefined();
+  });
+
+  it('dialog-family components keep contained isInline previews, not overlay mode (#3657)', () => {
+    const core = components['@astryxdesign/core'];
+    for (const name of ['Dialog', 'AlertDialog', 'CommandPalette']) {
+      const entry = core.find(c => c.name === name);
+      expect(entry, name).toBeDefined();
+      // Intentional: the contained preview keeps knobs usable while the
+      // component is visible. Guard the half-migrated shape too — overlay
+      // with isOpen: true would never show the open trigger.
+      expect(entry!.playground?.overlay, name).toBeUndefined();
+      expect(entry!.playground?.defaults, name).toMatchObject({
+        isOpen: true,
+        isInline: true,
+      });
+    }
   });
 
   it('Chat has many sub-components (standalone docs take priority over compound entries)', () => {
@@ -864,7 +909,10 @@ describe('exampleRegistry', () => {
 // "Selectable Card Multi".
 describe('block example title convention', () => {
   const blocksDir = fileURLToPath(
-    new URL('../../../../packages/cli/templates/blocks', import.meta.url),
+    new URL(
+      '../../../../packages/cli/assets/templates/blocks',
+      import.meta.url,
+    ),
   );
 
   function displayNameOf(relPath: string): string | null {
@@ -898,8 +946,7 @@ describe('Card playground defaults', () => {
     const entry = coreComponent('ClickableCard');
     expect(entry).toBeDefined();
     const defaults = entry!.playground?.defaults as
-      | Record<string, unknown>
-      | undefined;
+      Record<string, unknown> | undefined;
     expect(defaults).toBeDefined();
     expect(typeof defaults!.label).toBe('string');
     expect(defaults!.href).toBeDefined();
@@ -912,8 +959,7 @@ describe('Card playground defaults', () => {
     const entry = coreComponent('SelectableCard');
     expect(entry).toBeDefined();
     const defaults = entry!.playground?.defaults as
-      | Record<string, unknown>
-      | undefined;
+      Record<string, unknown> | undefined;
     expect(defaults).toBeDefined();
     expect(typeof defaults!.label).toBe('string');
     expect(typeof defaults!.isSelected).toBe('boolean');
@@ -948,5 +994,137 @@ describe('ToggleButtonGroup vertical example', () => {
     const vertical = examples.find(e => /Vertical/i.test(e.name));
     expect(vertical).toBeDefined();
     expect(vertical!.source).toContain('type="multiple"');
+  });
+});
+
+// ── LinkProvider utility page (#2733) ──────────────────────────────────────
+// LinkProvider is a non-visual provider: its page renders the hook-style
+// static layout (props table on the main page, no interactive playground).
+// That layout keys off `category: 'Utility'` with no curated playground, and
+// still needs props and an example block to have content to show.
+describe('LinkProvider utility page', () => {
+  const linkProvider = components['@astryxdesign/core'].find(
+    c => c.name === 'LinkProvider',
+  );
+
+  it('is a Utility entry without a curated playground', () => {
+    expect(linkProvider).toBeDefined();
+    expect(linkProvider!.category).toBe('Utility');
+    expect(linkProvider!.params).toBeNull();
+    expect(linkProvider!.playground).toBeNull();
+  });
+
+  it('documents props for the static props table', () => {
+    const propNames = linkProvider!.props.map(p => p.name);
+    expect(propNames).toContain('component');
+    expect(propNames).toContain('children');
+  });
+
+  it('registers an example block demonstrating a custom link component', () => {
+    const examples = exampleRegistry['LinkProvider'] ?? [];
+    expect(examples.length).toBeGreaterThanOrEqual(1);
+    expect(examples[0].source).toContain('<LinkProvider component=');
+  });
+});
+
+// ── Gallery Showcase Registry ──────────────────────────────────────────
+
+/**
+ * The eagerly imported showcases have to stay in step with what the
+ * /components gallery actually renders first — an eager set pointing at
+ * tiles further down the page would ship the chunk cost without removing
+ * any loading state. These tests recompute the gallery's render order from
+ * the same inputs the page uses and pin the eager set to the top of it.
+ */
+describe('galleryEagerShowcases', () => {
+  /**
+   * The gallery's category order lives in the page itself. Reading it back
+   * out of the source keeps this test honest without putting a second copy
+   * of the order anywhere — if the page is reordered, the expectations below
+   * follow it, and the eager list is what has to catch up.
+   */
+  const GALLERY_PAGE = path.join(
+    REPO_ROOT,
+    'apps/docsite/src/app/(docs)/components/page.tsx',
+  );
+  const pageSource = fs.readFileSync(GALLERY_PAGE, 'utf-8');
+  const categories = [
+    ...pageSource
+      .slice(
+        pageSource.indexOf('const CATEGORIES = ['),
+        pageSource.indexOf('] as const;'),
+      )
+      .matchAll(/'([^']+)'/g),
+  ].map(m => m[1]);
+
+  /** Mirrors the tile filtering in the same page. */
+  const isGalleryComponent = (comp: ComponentEntry) =>
+    !comp.isHiddenFromOverview &&
+    !comp.hidden &&
+    !comp.name.startsWith('use') &&
+    Boolean(comp.category) &&
+    comp.group !== 'Utilities';
+
+  /** Gallery render order: categories in display order, then registry order. */
+  const galleryOrder = categories.flatMap(cat =>
+    (components['@astryxdesign/core'] ?? []).filter(
+      c => c.category === cat && isGalleryComponent(c),
+    ),
+  );
+
+  it('reads the gallery category order out of the page', () => {
+    expect(categories.length).toBeGreaterThan(5);
+    expect(categories).toContain('Action');
+    expect(galleryOrder.length).toBeGreaterThan(50);
+  });
+
+  it('renders every category some component declares', () => {
+    const declared = new Set(
+      (components['@astryxdesign/core'] ?? [])
+        .filter(isGalleryComponent)
+        .map(c => c.category),
+    );
+    for (const cat of declared) {
+      expect(
+        categories,
+        `category "${cat}" has no section on the page`,
+      ).toContain(cat);
+    }
+  });
+
+  /**
+   * The point of the eager set is that those tiles are the ones a visitor
+   * sees first. If the gallery is reordered and this list isn't, the page
+   * pays the chunk cost for tiles that are no longer on top and still shows
+   * a skeleton for the ones that are.
+   */
+  it('eagerly imports exactly the tiles at the top of the gallery', () => {
+    const expected = galleryOrder
+      .filter(c => showcaseRegistry[c.name] != null)
+      .slice(0, Object.keys(eagerShowcases).length)
+      .map(c => c.name);
+    expect(Object.keys(eagerShowcases)).toEqual(expected);
+  });
+
+  it('eager entries are components, not lazy loaders', () => {
+    for (const [name, Component] of Object.entries(eagerShowcases)) {
+      expect(Component, name).toBeTypeOf('function');
+      // A lazy loader would resolve to a promise; an eager showcase is the
+      // component itself and must render synchronously on the server.
+      expect((Component as {$$typeof?: symbol}).$$typeof).toBeUndefined();
+    }
+  });
+
+  it('every eager component also has a lazy loader', () => {
+    for (const name of Object.keys(eagerShowcases)) {
+      expect(showcaseRegistry[name], name).toBeDefined();
+    }
+  });
+
+  it('keeps the eager set small enough to stay off the critical path', () => {
+    // 12 covers a 2560x1440 viewport. Well past that and the page chunk is
+    // carrying components nobody sees before they scroll.
+    expect(Object.keys(eagerShowcases).length).toBeGreaterThanOrEqual(6);
+    expect(Object.keys(eagerShowcases).length).toBeLessThanOrEqual(16);
   });
 });
