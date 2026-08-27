@@ -19,11 +19,10 @@
  *
  * Expansion state flows through an external store (TreeStore) so each
  * row's expander subscribes independently — a toggle re-renders only the
- * affected cells, not the whole body. Rows carry no tree ARIA at all:
- * aria-level and aria-expanded are only valid on role=row inside a
- * treegrid (axe aria-conditional-attr), and the host is a native
- * <table>. Hierarchy is conveyed by the tree column's indent; expansion
- * state by aria-expanded on the expander button.
+ * affected cells, not the whole body. Row ARIA (aria-level,
+ * aria-expanded) is applied imperatively via a ref callback on each
+ * <tr>, exactly like selection's row styling; each subscription
+ * self-cleans when the row disconnects.
  *
  * When `hasExpandableRows` is false (flat data), every transform is a
  * pass-through: adopting the plugin ahead of hierarchical data is a
@@ -43,7 +42,7 @@ import {
 import * as stylex from '@stylexjs/stylex';
 import {colorVars, radiusVars, spacingVars} from '../../../theme/tokens.stylex';
 import {Icon} from '../../../Icon';
-import {rtlStyles} from '../../../utils';
+import {mergeRefs} from '../../../utils';
 import type {
   TablePlugin,
   TableColumn,
@@ -194,6 +193,27 @@ function useRowMetaSnapshot<T extends Record<string, unknown>>(
 }
 
 // =============================================================================
+// Row ARIA (imperative, mirrors selection's row styling)
+// =============================================================================
+
+function applyRowTreeAria(
+  el: HTMLTableRowElement,
+  meta: TableTreeRowMeta | undefined,
+): void {
+  if (!meta) {
+    el.removeAttribute('aria-level');
+    el.removeAttribute('aria-expanded');
+    return;
+  }
+  el.setAttribute('aria-level', String(meta.level + 1));
+  if (meta.hasChildren) {
+    el.setAttribute('aria-expanded', String(meta.isExpanded));
+  } else {
+    el.removeAttribute('aria-expanded');
+  }
+}
+
+// =============================================================================
 // Styles
 // =============================================================================
 
@@ -222,7 +242,10 @@ const treeStyles = stylex.create({
     background: 'transparent',
     border: 'none',
     borderRadius: radiusVars['--radius-inner'],
-    cursor: 'pointer',
+    cursor: {
+      default: 'pointer',
+      ':is(:disabled,[aria-disabled="true"])': 'default',
+    },
     color: colorVars['--color-icon-secondary'],
     transitionProperty: 'color, background-color',
     transitionDuration: '150ms',
@@ -231,22 +254,34 @@ const treeStyles = stylex.create({
     // Match IconButton ghost hover: subtle overlay background
     backgroundImage: {
       default: null,
-      ':hover': {
+      ':hover:where(:not(:disabled,[aria-disabled="true"]))': {
         '@media (hover: hover)': `linear-gradient(${colorVars['--color-overlay-hover']}, ${colorVars['--color-overlay-hover']})`,
       },
     },
-    ':hover': {
+    ':hover:where(:not(:disabled,[aria-disabled="true"]))': {
       color: colorVars['--color-icon-primary'],
     },
   },
-  chevron: {
-    display: 'inline-flex',
+  chevronIcon: {
     transitionProperty: 'transform',
     transitionDuration: '150ms',
-    transform: 'rotate(0deg)',
   },
-  chevronExpanded: {
-    transform: 'rotate(90deg)',
+  // The RTL mirror is folded into each state's transform rather than living on
+  // a parent span. Both are `transform`, so on one element the later value
+  // would win — spelling out `scaleX(-1) rotate(...)` per state composes them
+  // exactly as the nested elements did, while leaving a single element to
+  // carry the glyph's theme target.
+  chevronIconCollapsed: {
+    transform: {
+      default: 'rotate(0deg)',
+      ':is([dir="rtl"] *)': 'scaleX(-1) rotate(0deg)',
+    },
+  },
+  chevronIconExpanded: {
+    transform: {
+      default: 'rotate(90deg)',
+      ':is([dir="rtl"] *)': 'scaleX(-1) rotate(90deg)',
+    },
   },
   /** Keeps leaf content aligned with expandable siblings. */
   leafSpacer: {
@@ -264,7 +299,10 @@ const treeStyles = stylex.create({
   },
   /** Whole-row-click expansion: signal the row is interactive. */
   clickableRow: {
-    cursor: 'pointer',
+    cursor: {
+      default: 'pointer',
+      ':is(:disabled,[aria-disabled="true"])': 'default',
+    },
   },
 });
 
@@ -294,15 +332,19 @@ function TreeExpander({
           : t('@astryx.tableTree.expandRow')
       }
       aria-expanded={isExpanded}>
-      <span {...stylex.props(rtlStyles.mirror)}>
-        <span
-          {...stylex.props(
-            treeStyles.chevron,
-            isExpanded && treeStyles.chevronExpanded,
-          )}>
-          <Icon icon="chevronRight" size="xsm" />
-        </span>
-      </span>
+      <Icon
+        icon="chevronRight"
+        size="xsm"
+        // The rotation rides on the glyph rather than a wrapper span so the
+        // theme target below reaches both the mark and its open/closed
+        // transform.
+        xstyle={[
+          treeStyles.chevronIcon,
+          isExpanded
+            ? treeStyles.chevronIconExpanded
+            : treeStyles.chevronIconCollapsed,
+        ]}
+      />
     </button>
   );
 }
@@ -343,15 +385,18 @@ function TreeExpandAllToggle({
           : t('@astryx.tableTree.expandAllRows')
       }
       aria-expanded={allExpanded}>
-      <span {...stylex.props(rtlStyles.mirror)}>
-        <span
-          {...stylex.props(
-            treeStyles.chevron,
-            allExpanded && treeStyles.chevronExpanded,
-          )}>
-          <Icon icon="chevronRight" size="xsm" />
-        </span>
-      </span>
+      <Icon
+        icon="chevronRight"
+        size="xsm"
+        // Same one-element treatment as the row expander: the glyph carries
+        // both the rotation and the theme target.
+        xstyle={[
+          treeStyles.chevronIcon,
+          allExpanded
+            ? treeStyles.chevronIconExpanded
+            : treeStyles.chevronIconCollapsed,
+        ]}
+      />
     </button>
   );
 }
@@ -433,7 +478,8 @@ export function useTableTreeData<T extends Record<string, unknown>>(
   const store = storeRef.current;
 
   // Notify subscribers on every render — useSyncExternalStore only
-  // re-renders cells whose snapshot actually changed.
+  // re-renders cells whose snapshot actually changed. Row ref subscribers
+  // apply imperative ARIA independently.
   useEffect(() => {
     store.notify();
   });
@@ -585,11 +631,35 @@ export function useTableTreeData<T extends Record<string, unknown>>(
       },
 
       transformBodyRow(props: BodyRowRenderProps, item: T) {
-        // Rows deliberately carry no tree ARIA: aria-level and
-        // aria-expanded are only valid on role=row inside a treegrid
-        // (axe aria-conditional-attr), and the host is a native <table>.
-        // Hierarchy is conveyed by the tree column's indent; expansion
-        // state by aria-expanded on the expander button.
+        // Attach a ref that subscribes to the store for imperative row
+        // ARIA. The ref returns a cleanup so React unsubscribes on
+        // detach — without it, every row re-render would leak one
+        // subscription (toggles shift rowIndex and re-render rows, so
+        // the listener set would grow on every toggle). The ref is
+        // attached even when no row is expandable so tree ARIA is
+        // removed if the data turns flat.
+        const treeRef: React.RefCallback<HTMLTableRowElement> = el => {
+          if (!el) {
+            return;
+          }
+          const apply = () => {
+            const cfg = store.getConfig();
+            applyRowTreeAria(
+              el,
+              cfg.hasExpandableRows ? cfg.getRowMeta(item) : undefined,
+            );
+          };
+          apply();
+          const unsub = store.subscribe(apply);
+          return () => {
+            unsub();
+          };
+        };
+
+        const withRef = {
+          ...props,
+          ref: props.ref ? mergeRefs(props.ref, treeRef) : treeRef,
+        };
 
         // Whole-row-click expansion (opt-in). Only expandable rows are
         // clickable; leaves and flat data stay inert. `hasExpandableRows` is
@@ -601,13 +671,13 @@ export function useTableTreeData<T extends Record<string, unknown>>(
           cfg.hasExpandableRows &&
           cfg.getRowMeta(item)?.hasChildren === true;
         if (!rowClickExpandable) {
-          return props;
+          return withRef;
         }
 
         return {
-          ...props,
+          ...withRef,
           htmlProps: {
-            ...props.htmlProps,
+            ...withRef.htmlProps,
             onClick: (event: React.MouseEvent<HTMLTableRowElement>) => {
               // Don't hijack clicks on interactive cell content (the chevron
               // already stops propagation, but a composed selection checkbox,
@@ -626,7 +696,7 @@ export function useTableTreeData<T extends Record<string, unknown>>(
               cfg.onToggleItem(item);
             },
           },
-          xstyle: [...props.xstyle, treeStyles.clickableRow],
+          xstyle: [...withRef.xstyle, treeStyles.clickableRow],
         };
       },
     };
