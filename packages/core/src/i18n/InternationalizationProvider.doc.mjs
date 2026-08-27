@@ -38,6 +38,11 @@ export const docs = {
           'Use real BCP 47 tags such as `fr`, `pt-BR`, or `ar`; regional locales fall back to their base language before English.',
       },
       {
+        guidance: true,
+        description:
+          'Set the `dir` attribute on `<html>` (or a wrapping element) yourself; the provider does not set it. Astryx components mirror layout and directional icons from the DOM `dir`, so an RTL locale won\'t visually mirror without it. Use `getLocaleDirection(locale)` to derive the value for both the provider and the DOM.',
+      },
+      {
         guidance: false,
         description:
           'Cast custom catalog maps to `any`; the i18n package exports `MessagesByLocale` and `Catalog` for local catalog typing.',
@@ -72,6 +77,13 @@ export const docs = {
       required: false,
       description:
         'Optional adapter that reuses an existing i18n runtime (react-intl, i18next, LinguiJS) to format astryx strings instead of the bundled intl-messageformat. Shape is `{format(message: string, values?: Record<string, unknown>, locale?: string): string}`. Astryx keeps its own lookup — overrides, then messages, then the parent locale, then the shipped "en" catalog — and passes the already-resolved ICU message, never an `@astryx.*` key. Every astryx string goes through it, including value-less ones (`values` is `undefined` for those), so keep the miss path cheap. It must return a string; anything else warns once in development and falls back to astryx\'s resolved message. Holds a function, so it can only be passed from a client component. A nested provider replaces it rather than inheriting it. Memoize it — a fresh object each render re-renders every astryx string in the subtree.',
+    },
+    {
+      name: 'dir',
+      type: "'ltr' | 'rtl'",
+      required: false,
+      description:
+        'Explicit text-direction override for the context. When omitted, direction is derived from `locale` via `Intl.Locale.getTextInfo()`. This sets the direction Astryx reads, but it does NOT set the DOM `dir` attribute; you must set `dir` on `<html>` (or a wrapping element) yourself, since Astryx components mirror layout and directional icons from the DOM `dir`, not from this prop. Set both to the same value and keep them in sync.',
     },
     {
       name: 'children',
@@ -197,6 +209,11 @@ export const docsDense = {
         guidance: true,
         description:
           'Use real BCP 47 tags like `fr`, `pt-BR`, or `ar`; regional locales fall back to base language before English.',
+      },
+      {
+        guidance: true,
+        description:
+          'Set `dir` on `<html>` (or a wrapper) yourself; the provider does not. Astryx mirrors layout and directional icons from the DOM `dir`, so an RTL locale will not mirror without it. Use `getLocaleDirection(locale)` for both the provider and the DOM.',
       },
       {
         guidance: false,

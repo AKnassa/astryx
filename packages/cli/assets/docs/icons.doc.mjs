@@ -29,6 +29,8 @@ export const docs = {
             ['chevronDown', 'Dropdown triggers, expand/collapse'],
             ['chevronLeft', 'Navigate back, previous'],
             ['chevronRight', 'Navigate forward, next'],
+            ['chevronsLeft', 'Jump to first, skip to start'],
+            ['chevronsRight', 'Jump to last, skip to end'],
             ['check', 'Checkbox checked, confirm'],
             ['success', 'Success status indicator'],
             ['error', 'Error status indicator'],
@@ -81,20 +83,52 @@ import { HeartIcon } from 'lucide-react';
       content: [
         {
           type: 'prose',
-          text: 'Themes can replace the default SVGs for any semantic name using registerIcons(). This lets you swap the entire icon set (e.g. heroicons \u2192 lucide) without touching component code.',
+          text: 'Themes can replace the default SVGs for any semantic name with the `icons` field in `defineTheme()`. This lets you swap the icon set (e.g. heroicons → lucide) without touching component code, and keeps lookup scoped to the active theme instead of mutating global defaults.',
         },
         {
           type: 'code',
           lang: 'tsx',
-          label: 'Registering theme icons',
-          code: `import { registerIcons } from '@astryxdesign/core/Icon';
-import { XMarkIcon, ChevronDownIcon } from '@heroicons/react/24/outline';
+          label: 'Theme-scoped icons',
+          code: `import {defineTheme} from '@astryxdesign/core/theme';
+import {XMarkIcon, ChevronDownIcon} from '@heroicons/react/24/outline';
 
-registerIcons({
-  close: <XMarkIcon />,
-  chevronDown: <ChevronDownIcon />,
-  // ... override as many as needed
+export const brandTheme = defineTheme({
+  name: 'brand',
+  icons: {
+    close: <XMarkIcon />,
+    chevronDown: <ChevronDownIcon />,
+  },
 });`,
+        },
+      ],
+    },
+    {
+      title: 'Component and Library Icons',
+  category: 'foundations',
+      content: [
+        {
+          type: 'prose',
+          text: 'A glyph that belongs to one component or library gets a namespaced key (`numberInput:stepperDown`, `richtext:bold`) instead of a new semantic name. It resolves through the same registry and a theme overrides it the same way, but the shared IconName list stays reserved for glyphs the whole system uses — so adding one does not make every downstream icon registry grow a key.',
+        },
+        {
+          type: 'code',
+          lang: 'tsx',
+          label: 'Owning and theming a namespaced icon',
+          code: `// The component renders it like any other name, keeping size and color.
+<Icon icon="numberInput:stepperDown" size="xsm" />
+
+// A theme maps it independently of the shared chevron.
+export const brandTheme = defineTheme({
+  name: 'brand',
+  icons: {
+    chevronDown: <ChevronDownIcon />,
+    'numberInput:stepperDown': <CaretDownFilledIcon />,
+  },
+});`,
+        },
+        {
+          type: 'prose',
+          text: 'Ship the fallback in `defaultIcons` under the same key so the glyph still renders with no theme, or pass one to `getExtendedIcon(key, fallback)` when the icon lives outside core.',
         },
       ],
     },
@@ -104,15 +138,15 @@ registerIcons({
       content: [
         {
           type: 'prose',
-          text: 'To add a new semantic icon name to the design system:',
+          text: 'To add a new semantic icon name to the design system — only for a glyph the whole system shares; a component-owned one takes a namespaced key instead:',
         },
         {
           type: 'list',
           style: 'ordered',
           items: [
-            'Add the name to IconName type in packages/core/src/Icon/globalIconRegistry.tsx',
-            'Add the default SVG to packages/core/src/Icon/defaultIcons.tsx',
-            'Add a row to the Available Names table in packages/cli/docs/icons.doc.mjs',
+            'Add the name to IconName type in `packages/core/src/Icon/globalIconRegistry.tsx`',
+            'Add the default SVG to `packages/core/src/Icon/defaultIcons.tsx`',
+            'Add a row to the Available Names table in `packages/cli/assets/docs/icons.doc.mjs`',
           ],
         },
       ],

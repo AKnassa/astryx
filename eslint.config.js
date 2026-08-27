@@ -1,6 +1,8 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 
 import { defineConfig } from "eslint/config";
+import { includeIgnoreFile } from "@eslint/compat";
+import path from "node:path";
 import js from "@eslint/js";
 import tseslint from "typescript-eslint";
 import eslintReact from "@eslint-react/eslint-plugin";
@@ -33,6 +35,38 @@ const astryxEslintPlugin = /** @type {import('eslint').ESLint.Plugin} */ (
   /** @type {unknown} */ (astryxPlugin)
 );
 
+/**
+ * Reuse a `.gitignore` as lint ignores, so generated and vendored files are
+ * never linted. Without this, anything git ignores but that exists on disk
+ * gets linted the moment you generate it — e.g. `apps/docsite/public/monaco`
+ * (25MB of minified Monaco + the TS compiler, copied in by
+ * `scripts/copy-vendor.mjs`) produced ~23.5k errors for anyone who had run
+ * the docsite. CI never saw it: it lints a fresh checkout, where the
+ * generated files don't exist yet.
+ *
+ * Patterns in a nested `.gitignore` are relative to that file, so each one
+ * needs its directory as `basePath`.
+ */
+const gitignoreDirs = [
+  "apps/docsite",
+  "apps/sandbox",
+  "apps/template-viewer",
+  "internal/vibe-tests",
+  "packages/build",
+  "packages/cli",
+];
+
+const gitignores = [
+  includeIgnoreFile(path.join(import.meta.dirname, ".gitignore"), "root .gitignore"),
+  ...gitignoreDirs.map((dir) => ({
+    basePath: dir,
+    ...includeIgnoreFile(
+      path.join(import.meta.dirname, dir, ".gitignore"),
+      `${dir}/.gitignore`,
+    ),
+  })),
+];
+
 // typescript-eslint ≥8.62 types its presets with loose cross-version
 // "compatibility" shapes (`CompatibleConfig` = `{name?, rules?: object}`);
 // normalize back to ESLint's own config type for `defineConfig`.
@@ -43,10 +77,10 @@ const tseslintRecommended = /** @type {import('eslint').Linter.Config[]} */ (
 export default defineConfig(
   js.configs.recommended,
   tseslintRecommended,
+  ...gitignores,
   {
     ignores: [
-      "**/dist/**",
-      "**/node_modules/**",
+      // dist/** and node_modules/** come from the .gitignore imports above.
       ".claude/**",
       "**/internal/eslint-plugin-astryx/**",
       ".github/scripts/**",
@@ -168,6 +202,41 @@ export default defineConfig(
       '@astryx/copyright-header': 'error',
     },
   },
+  // Table rows must sit inside a table section. `<table>` cannot contain a
+  // `<tr>` directly: the HTML parser inserts an implied `<tbody>` when it
+  // parses server-rendered markup and React does not when it renders on the
+  // client, so the two trees mismatch on hydration (#5277). Repo-wide, not
+  // core-only — the shape reached a shipped CLI page template, which consumers
+  // copy into their own apps, and the @eslint-react DOM rules below are scoped
+  // to packages/core/src.
+  {
+    files: ["**/*.{ts,tsx}"],
+    ignores: ["**/*.d.ts", "**/dist/**"],
+    plugins: {
+      '@astryx': astryxEslintPlugin,
+    },
+    rules: {
+      '@astryx/require-table-section': 'error',
+    },
+  },
+  // Locale-sensitive formatting in shipped packages must go through the
+  // provider-aware locale utilities, never raw Intl — see the rule's own doc
+  // comment and internal/eslint-plugin-astryx/README.md for the approved
+  // infrastructure boundary. Lab adopts this gate when a component graduates.
+  {
+    files: [
+      "packages/core/src/**/*.{ts,tsx}",
+      "packages/charts/src/**/*.{ts,tsx}",
+      "packages/richtext/src/**/*.{ts,tsx}",
+      "packages/vega/src/**/*.{ts,tsx}",
+    ],
+    plugins: {
+      '@astryx': astryxEslintPlugin,
+    },
+    rules: {
+      '@astryx/no-raw-intl-locale': 'error',
+    },
+  },
   // Astryx design token enforcement - applies to core package (excluding theme files)
   {
     files: ["packages/core/src/**/*.{ts,tsx}"],
@@ -186,14 +255,62 @@ export default defineConfig(
       }],
       // announce() live-region messages are user-facing text; the rule checks
       // them as call arguments (callees defaults to ['announce']).
-      // TEMPORARY allowlist: these exact strings predate the check and are
-      // being replaced with t(...) in the scan #3 i18n sweep PRs
-      // (CodeBlock 'Copied'; MultiSelector 'Selection cleared' /
-      // 'All selected'). Remove each entry as its fix merges; delete
-      // allowedCalleeStrings entirely once the sweep lands.
-      '@astryx/no-hardcoded-i18n-string': [isStrictMode ? 'error' : 'warn', {
-        allowedCalleeStrings: ['Copied', 'Selection cleared', 'All selected'],
-      }],
+      '@astryx/no-hardcoded-i18n-string': isStrictMode ? 'error' : 'warn',
+    },
+  },
+  // What a disabled control says to the pointer is a defect wherever it
+  // ships, so these two rules reach past core: lab components are consumed
+  // the same way, and lab is where the next core component comes from.
+  {
+    files: ["packages/lab/src/**/*.{ts,tsx}"],
+    plugins: {
+      '@astryx': astryxEslintPlugin,
+    },
+    rules: {
+      '@astryx/no-hover-on-disabled': 'error',
+      '@astryx/disabled-cursor': 'error',
+    },
+  },
+  // `light-dark()` is the theme layer's mechanism, and reaches lab for the
+  // same reason the two rules above do: a component that hardcodes a
+  // light/dark decision is unreachable by every theme, and lab is where the
+  // next core component comes from. Core is covered by the token-enforcement
+  // block above (which already excludes `packages/core/src/theme/**`) and is
+  // clean, so it errors there. Lab warns for now: LogStream's `levelWarn`/
+  // `levelError` are a WCAG contrast fix written per scheme, and moving them
+  // to the theme layer means deciding which contrast-tuned status-text token
+  // they should read — a token decision, not a mechanical one. Flip to
+  // 'error' once that lands.
+  {
+    files: ["packages/lab/src/**/*.{ts,tsx}"],
+    plugins: {
+      '@astryx': astryxEslintPlugin,
+    },
+    rules: {
+      '@astryx/no-light-dark-outside-theme': 'warn',
+    },
+  },
+  // A colour written into a component is the colour every theme gets — a theme
+  // can retint any token a component reads, but it cannot reach inside a
+  // literal. Core is covered by the token-enforcement block above (which
+  // already excludes packages/core/src/theme/**); this reaches the other
+  // packages that ship component styling, for the same reason the rules above
+  // do. Warn everywhere for now: the 23 violations on main are 20 in lab
+  // (LogStream's console palette, Sankey's var() fallbacks), 2 in core and 1
+  // in charts, and each wants a token decision rather than a mechanical
+  // substitution. Promote to 'error' per package as each reaches zero.
+  {
+    files: [
+      "packages/lab/src/**/*.{ts,tsx}",
+      "packages/charts/src/**/*.{ts,tsx}",
+      "packages/richtext/src/**/*.{ts,tsx}",
+      "packages/vega/src/**/*.{ts,tsx}",
+    ],
+    plugins: {
+      '@astryx': astryxEslintPlugin,
+    },
+    rules: {
+      '@astryx/no-raw-color': 'warn',
     },
   },
   // The i18n runtime itself defines the message strings the rest of the
@@ -313,6 +430,9 @@ export default defineConfig(
       "@typescript-eslint/no-non-null-assertion": "off",
       "@typescript-eslint/consistent-type-assertions": "off",
       "react-compiler/react-compiler": "off",
+      // Test harnesses wrap components in sized/positioned <div>s to set up a
+      // scenario; that scaffolding is not shipped DOM.
+      "@astryx/no-style-only-wrapper": "off",
     },
   },
   // Non-production code — allow console.log for demos, tools, and examples
@@ -406,6 +526,97 @@ export default defineConfig(
       '@astryx/copyright-header': 'error',
     },
   },
+  // ── CLI architecture invariants ────────────────────────────────────────
+  // Enforces the layering documented in CONTRIBUTING > "Working on the astryx
+  // CLI". Every rule below is already clean across packages/cli, so they are
+  // errors: they exist to prevent regressions, not to flag a backlog.
+  //
+  // NOTE: flat config *overrides* (does not merge) a same-named rule, so the
+  // `no-restricted-imports` blocks are kept disjoint — one per layer.
+
+  // authoring/ is pure data contracts + sealed parsers: it sits below every
+  // other layer and imports none of them.
+  {
+    files: ["packages/cli/authoring/**/*.mjs"],
+    rules: {
+      "no-restricted-imports": ["error", {
+        patterns: [{
+          group: ["**/api/**", "**/clients/**", "**/foundation/**"],
+          message:
+            "authoring/ is pure data contracts (types + sealed parsers) and must not import api/, clients/, or foundation/. Move shared behavior down into the contract, or invert the dependency.",
+        }],
+      }],
+    },
+  },
+  // api/ is the behavior source of truth — it must never reach up into the
+  // CLI presentation layer (that's what keeps `astryx --json` and the imported
+  // function returning identical data).
+  {
+    files: ["packages/cli/api/**/*.mjs"],
+    rules: {
+      "no-restricted-imports": ["error", {
+        patterns: [{
+          group: ["**/clients/**"],
+          message:
+            "api/ is the behavior source of truth and must not import clients/ (the CLI presentation layer). Return data in the { type, data } envelope and let the command handler render it.",
+        }],
+        paths: [{
+          name: "zod",
+          message:
+            "zod is sealed behind the authoring/ parsers. Validate at the load boundary (parseDoc/parseConfig/parseIntegration) and pass typed data inward.",
+        }],
+      }],
+    },
+  },
+  // Everything above the contracts consumes already-parsed, typed data.
+  {
+    files: ["packages/cli/clients/**/*.mjs"],
+    rules: {
+      "no-restricted-imports": ["error", {
+        paths: [{
+          name: "zod",
+          message:
+            "zod is sealed behind the authoring/ parsers. Validate at the load boundary (parseDoc/parseConfig/parseIntegration) and pass typed data inward.",
+        }],
+      }],
+    },
+  },
+  // foundation/ is the bottom layer: cross-cutting infra that the layers above
+  // build on. It must not reach back up into api/ or clients/. (It briefly did:
+  // Project pulled template discovery out of api/template, whose adapter then
+  // imported Project back — a cycle across the layer boundary. The adapter and
+  // the contribution validators now live in foundation, where their callers are.)
+  {
+    files: ["packages/cli/foundation/**/*.mjs"],
+    rules: {
+      "no-restricted-imports": ["error", {
+        patterns: [{
+          group: ["**/api/**", "**/clients/**"],
+          message:
+            "foundation/ is the bottom layer and must not import api/ or clients/. If foundation needs it, it belongs in foundation — move it down rather than reaching up.",
+        }],
+        paths: [{
+          name: "zod",
+          message:
+            "zod is sealed behind the authoring/ parsers. Validate at the load boundary (parseDoc/parseConfig/parseIntegration) and pass typed data inward.",
+        }],
+      }],
+    },
+  },
+  // A command's --help and its manifest entry are generated from its colocated
+  // CommandDoc via defineCommand. Registering straight onto Commander bypasses
+  // the doc, so the docs silently stop describing the real CLI.
+  {
+    files: ["packages/cli/clients/cli/commands/**/*.mjs"],
+    rules: {
+      "no-restricted-syntax": ["error", {
+        selector:
+          "CallExpression[callee.type='MemberExpression'][callee.property.name='command']",
+        message:
+          "Register commands with defineCommand(parent, doc, {fn, action}) so --help and the manifest come from the colocated CommandDoc. See CONTRIBUTING > Working on the astryx CLI.",
+      }],
+    },
+  },
   // CLI tests — relax author-ergonomics rules (test files emit freely and may
   // keep intentionally-unused fixtures). Must come after the CLI block above.
   {
@@ -413,6 +624,9 @@ export default defineConfig(
     rules: {
       "@astryx/no-raw-console-cli": "off",
       "@typescript-eslint/no-unused-vars": "off",
+      // Tests build fixtures directly against zod and Commander.
+      "no-restricted-imports": "off",
+      "no-restricted-syntax": "off",
     },
   },
 );
