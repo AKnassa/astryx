@@ -171,6 +171,40 @@ describe('Switch', () => {
     expect(switchEl).toHaveAttribute('aria-describedby', description.id);
   });
 
+  it('toggles when clicking on the description', async () => {
+    const user = userEvent.setup();
+    const handleChange = vi.fn();
+    render(
+      <Switch
+        label="Dark mode"
+        description="Switch to a darker color scheme"
+        value={false}
+        onChange={handleChange}
+      />,
+    );
+    await user.click(screen.getByText('Switch to a darker color scheme'));
+    expect(handleChange).toHaveBeenCalledWith(true, expect.any(Object));
+  });
+
+  it('does not fold the description into the switch accessible name', () => {
+    // Description stays a sibling of the <label>, so it must not become part
+    // of the switch's accessible name — it belongs in the accessible
+    // description (aria-describedby) only, to avoid double announcement.
+    render(
+      <Switch
+        label="Dark mode"
+        description="Switch to a darker color scheme"
+        value={false}
+        onChange={() => {}}
+      />,
+    );
+    const switchEl = screen.getByRole('switch');
+    expect(switchEl).toHaveAccessibleName('Dark mode');
+    expect(switchEl).toHaveAccessibleDescription(
+      'Switch to a darker color scheme',
+    );
+  });
+
   it('is disabled when isDisabled prop is true', () => {
     render(
       <Switch
@@ -226,6 +260,22 @@ describe('Switch', () => {
     expect(label).toBeInTheDocument();
     // Label should still be accessible
     expect(screen.getByLabelText('Toggle row')).toBeInTheDocument();
+  });
+
+  it('drops the label gap when isLabelHidden so the row is only as wide as the track', () => {
+    const {rerender} = render(
+      <Switch
+        label="Toggle row"
+        isLabelHidden
+        value={false}
+        onChange={() => {}}
+      />,
+    );
+    const row = screen.getByRole('switch').parentElement!.parentElement!;
+    expect(getComputedStyle(row).gap).toMatch(/^0(px)?$/);
+
+    rerender(<Switch label="Toggle row" value={false} onChange={() => {}} />);
+    expect(getComputedStyle(row).gap).not.toMatch(/^0(px)?$/);
   });
 
   it('keeps description linked via aria-describedby when isLabelHidden', () => {
@@ -585,31 +635,6 @@ describe('Switch', () => {
       expect(getField(explicit)).not.toHaveAttribute('data-label-spacing');
       expect(getField(explicit).className).toBe(getField(implicit).className);
     });
-
-    it("treats the deprecated 'default' value as an alias for hug", () => {
-      const {container: hug} = render(
-        <Switch
-          label="Notify"
-          value={false}
-          onChange={() => {}}
-          labelSpacing="hug"
-        />,
-      );
-      const {container: deprecated} = render(
-        <Switch
-          label="Notify"
-          value={false}
-          onChange={() => {}}
-          labelSpacing="default"
-        />,
-      );
-      expect(getField(deprecated)).not.toHaveAttribute('data-label-spacing');
-      expect(getField(deprecated).className).toBe(getField(hug).className);
-      // The switch row keeps the hug layout, not the spread justification.
-      expect(getField(deprecated).firstElementChild?.className).toBe(
-        getField(hug).firstElementChild?.className,
-      );
-    });
   });
   describe('form participation', () => {
     it('submits under htmlName when on', () => {
@@ -625,6 +650,38 @@ describe('Switch', () => {
       );
       const data = new FormData(container.querySelector('form')!);
       expect(data.get('notify')).toBe('on');
+    });
+
+    it('does not block form submission when required and disabled with a disabledMessage', () => {
+      const {container} = render(
+        <form>
+          <Switch
+            label="Notify"
+            htmlName="notify"
+            value={false}
+            onChange={() => {}}
+            isRequired
+            isDisabled
+            disabledMessage="Notifications are turned off org-wide"
+          />
+        </form>,
+      );
+      expect(container.querySelector('form')!.checkValidity()).toBe(true);
+    });
+
+    it('still blocks submission when required and off but enabled', () => {
+      const {container} = render(
+        <form>
+          <Switch
+            label="Notify"
+            htmlName="notify"
+            value={false}
+            onChange={() => {}}
+            isRequired
+          />
+        </form>,
+      );
+      expect(container.querySelector('form')!.checkValidity()).toBe(false);
     });
 
     it('is excluded from form data when disabled, even with a disabledMessage', () => {
@@ -764,5 +821,15 @@ describe('forced colors (WCAG 1.4.11)', () => {
     );
     // And the tint never leaks into the forced-colors output.
     expect(getForcedColorsRules()).not.toContain('color-mix');
+  });
+});
+
+describe('label theme target', () => {
+  it('names its own label so a theme can style it apart from a field label', () => {
+    // See CheckboxInput: the control names the label it owns.
+    render(<Switch label="Wi-Fi" value={false} onChange={() => {}} />);
+    const label = screen.getByText('Wi-Fi').closest('label');
+    expect(label).toHaveClass('astryx-field-label');
+    expect(label).toHaveClass('astryx-switch-label');
   });
 });

@@ -9,23 +9,12 @@
 
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import {assertWithin, PathSafetyError} from '../../../utils/path-safety.mjs';
+import {assertWithin, PathSafetyError} from '../../../foundation/fs/path-safety.mjs';
 import {AstryxError} from '../../error.mjs';
-import {ERROR_CODES} from '../../../lib/error-codes.mjs';
+import {ERROR_CODES} from '../../../foundation/response/error-codes.mjs';
 import {THEMES_DIR, listThemes, findTheme} from '../_adapter.mjs';
-
-// Stripped from scaffolded files so the consumer's copy doesn't carry our
-// repo boilerplate (mirrors the docsite). Preserves a leading BOM/shebang.
-const META_COPYRIGHT_HEADER_RE =
-  /^(\uFEFF?(?:#![^\r\n]*(?:\r?\n))?)\/\/ Copyright \(c\) Meta Platforms, Inc\. and affiliates\.\r?\n(?:\r?\n)*/;
-
-/**
- * @param {string} source
- * @returns {string}
- */
-function stripCopyrightHeader(source) {
-  return source.replace(META_COPYRIGHT_HEADER_RE, '$1');
-}
+// Scaffolded files must not carry our repo boilerplate into a consumer's tree.
+import {stripCopyrightHeader} from '../../../foundation/text/copyright-header.mjs';
 
 /**
  * @param {string} slug

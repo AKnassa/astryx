@@ -14,7 +14,7 @@
  */
 
 import {AstryxError} from '../../../error.mjs';
-import {ERROR_CODES} from '../../../../lib/error-codes.mjs';
+import {ERROR_CODES} from '../../../../foundation/response/error-codes.mjs';
 import {resolveTopicDocs} from '../../_adapter.mjs';
 
 /**
@@ -24,6 +24,7 @@ import {resolveTopicDocs} from '../../_adapter.mjs';
  * @param {string} [options.lang]
  * @param {boolean} [options.zh]
  * @param {boolean} [options.dense]
+ * @param {string} [options.cwd]
  * @returns {Promise<import('../../docs.type.mjs').DocsDetailSectionResponse>}
  */
 export async function section(topic, sectionName, options = {}) {

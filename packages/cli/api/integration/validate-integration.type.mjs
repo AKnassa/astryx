@@ -17,6 +17,7 @@
  * @property {string} [components]
  * @property {string} [templates]
  * @property {string} [codemods]
+ * @property {string} [docs]
  * @property {string} [issuesUrl]
  * @property {string} __spec
  * @property {string} __packageDir
@@ -33,7 +34,7 @@
  * `astryx --json validate-integration [package]`.
  * @typedef {object} ValidateIntegrationResponse
  * @property {'integration.validate'} type
- * @property {{name: string | null, version: string | null, issues: import('../../types/integration').AstryxIntegrationIssue[]}} data
+ * @property {{name: string | null, version: string | null, issues: import('../../foundation/integrations/issue').AstryxIntegrationIssue[]}} data
  */
 
 export {};

@@ -23,20 +23,24 @@
  * @typedef {object} DocsListEntry
  * @property {string} topic
  * @property {string} description
+ * @property {string} package the package that owns this topic —
+ *   '@astryxdesign/cli' for a built-in one, else the contributing integration
+ * @property {string} [replaces] the topic this one took the place of, when it
+ *   was contributed as a replacement
  */
 
 /**
  * xds --json docs <topic>
  * @typedef {object} DocsDetailResponse
  * @property {'docs.detail'} type
- * @property {import('../../../core/src/docs-types').ReferenceDoc} data
+ * @property {import('@astryxdesign/cli/authoring').ReferenceDoc} data
  */
 
 /**
  * xds --json docs <topic> <section>
  * @typedef {object} DocsDetailSectionResponse
  * @property {'docs.detail.section'} type
- * @property {import('../../../core/src/docs-types').ReferenceSection} data
+ * @property {import('@astryxdesign/cli/authoring').ReferenceSection} data
  */
 
 /**
@@ -45,6 +49,8 @@
  * @property {string} [lang]
  * @property {boolean} [zh]
  * @property {boolean} [dense]
+ * @property {string} [cwd] project directory whose configured integrations
+ *   contribute topics; defaults to process.cwd()
  */
 
 export {};
