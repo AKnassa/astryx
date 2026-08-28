@@ -68,8 +68,12 @@ export type AnySpec = (VegaSpec | VegaLiteSpec) & {$schema: string};
 export interface ParseOptions {
   /**
    * When `true`, the parser retains the abstract syntax tree (AST) of
-   * Vega expressions in the runtime. Useful for introspection and tooling.
-   * Defaults to `false`.
+   * Vega expressions in the runtime instead of compiling them with the
+   * Function constructor. Pair it with `viewOptions.expr` set to
+   * `vega-interpreter`'s evaluator to run spec expressions interpreted —
+   * the required configuration for specs you didn't author (see
+   * "Untrusted specs" in the README). Also useful for introspection and
+   * tooling. Defaults to `false`.
    */
   ast?: boolean;
 }
@@ -128,8 +132,18 @@ export interface VegaChartProps extends Omit<
    * - `vega-lite` -> compiled to Vega via `vega-lite`'s `compile()`, then rendered
    * - `vega` -> rendered directly without compilation
    *
+   * **A spec is a program, not just data.** Vega evaluates the expression
+   * strings inside a spec (signals, event streams, encodings, filters) and,
+   * by default, compiles them with the Function constructor; a spec's data
+   * sources can also name URLs the default loader will fetch, including
+   * signal-built ones. Only render specs you author or review. For specs
+   * from users, documents, or model output, wire the interpreter and a
+   * restricted loader — see "Untrusted specs" in the README — and treat that
+   * configuration as required, not optional.
+   *
    * @see https://vega.github.io/vega/docs/specification/
    * @see https://vega.github.io/vega-lite/docs/spec.html
+   * @see https://vega.github.io/vega/usage/interpreter/
    */
   spec: AnySpec;
   /**

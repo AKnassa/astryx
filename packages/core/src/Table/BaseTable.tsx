@@ -183,9 +183,12 @@ function TableRowInner<T extends Record<string, unknown>>({
     );
 
     const isDefaultRenderer = !col.renderCell;
-    const rawContent = isDefaultRenderer
-      ? defaultCellRenderer(item, col.key)
-      : (col.renderCell?.(item) ?? null);
+    let rawContent: ReactNode = null;
+    if (!cellRenderProps.isContentSuppressed) {
+      rawContent = isDefaultRenderer
+        ? defaultCellRenderer(item, col.key)
+        : (col.renderCell?.(item) ?? null);
+    }
 
     // In truncate mode, wrap default-rendered string content in
     // <Text maxLines={1}> for smart tooltips that only appear
@@ -242,6 +245,17 @@ function TableRowInner<T extends Record<string, unknown>>({
       {rowRenderProps.children}
     </RowComponent>
   );
+
+  // afterRow: plugins (e.g. row expansion) can append a full-width detail
+  // panel `<tr>` after the row. Rendered as a sibling fragment.
+  if (rowRenderProps.afterRow) {
+    return (
+      <>
+        {row}
+        {rowRenderProps.afterRow}
+      </>
+    );
+  }
 
   return row;
 }
@@ -514,7 +528,12 @@ function BaseTableInner<T extends Record<string, unknown>>({
       {...(ariaRowCount != null ? {'aria-rowcount': ariaRowCount} : null)}
       {...tableRenderProps.htmlProps}
       {...mergeProps(
-        themeProps('base-table'),
+        themeProps('table', undefined, {
+          // `base-table` was a second root on the same <table> element that
+          // `table` names; themes styling it keep working until the next
+          // major.
+          legacyNames: ['base-table'],
+        }),
         stylex.props(...tableRenderProps.xstyle, xstyle),
         [tableRenderProps.htmlProps.className, className]
           .filter(Boolean)
