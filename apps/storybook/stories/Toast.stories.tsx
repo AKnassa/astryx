@@ -67,6 +67,13 @@ const styles = stylex.create({
     flexWrap: 'wrap',
     gap: 'var(--spacing-2)',
   },
+  // A slab of each app mode's own page background, so a light and a dark app
+  // can sit side by side on one canvas and their text stays readable.
+  modeColumn: {
+    padding: 'var(--spacing-4)',
+    borderRadius: 'var(--radius-container)',
+    backgroundColor: 'var(--color-background-body)',
+  },
 });
 
 const mobileStoryParameters = {
@@ -770,6 +777,107 @@ export const ThemedToastLive: StoryObj = {
         story:
           'Same theme, real toasts. The viewport is inside `Theme`, so the ' +
           'scoped theme CSS reaches the toasts it renders.',
+      },
+    },
+  },
+};
+
+/**
+ * A toast paints an inverted surface, and inside the card every `light-dark()`
+ * token follows that surface rather than the app. When the surface is dark in
+ * BOTH app modes — the error toast is, and a brand that keeps its toasts dark
+ * is too — nothing in the card can tell a dark app from a light one, so the
+ * only way to give the action a different treatment per app mode used to be
+ * picking a Button `variant` from `useTheme()` in product code.
+ *
+ * The card reflects the mode it renders under as the `themeMode` state, so the
+ * theme keys on that instead. A theme-owned custom property set on
+ * `toast['themeMode:*']` inherits into `endContent`, where the theme's Button
+ * rule reads it behind the variant's normal value. Product code passes
+ * `variant="secondary"` and nothing else; the theme decides whether that
+ * reads filled or ghost in each mode.
+ *
+ * The Button rule is theme-wide by construction (the override grammar has no
+ * descendant form), so its fallback must be the token the variant already
+ * paints with, `--color-neutral` for secondary; outside a toast the property
+ * is unset and nothing about the button changes.
+ */
+const modeAwareToastTheme = defineTheme({
+  name: 'toast-mode-aware-demo',
+  components: {
+    toast: {
+      // The same dark surface in both app modes: the shape the state is for.
+      base: {backgroundColor: '#2C333D'},
+      'type:error': {backgroundColor: '#5C0A18'},
+      // Light app: the action stays a filled secondary. Dark app: it reads as
+      // a ghost. Only a toast sets the property, so buttons elsewhere keep
+      // the fallback — the variant's own background.
+      'themeMode:light': {
+        '--demo-toast-action-bg': 'rgb(255 255 255 / 0.16)',
+      },
+      'themeMode:dark': {
+        '--demo-toast-action-bg': 'transparent',
+      },
+    },
+    button: {
+      'variant:secondary': {
+        backgroundColor: 'var(--demo-toast-action-bg, var(--color-neutral))',
+      },
+    },
+  },
+});
+
+/**
+ * Both cards are the same dark surface; only the app mode around them
+ * differs. The `secondary` action reads filled in the light app and ghost in
+ * the dark one, from `themeMode` alone — nothing in product code branches.
+ */
+export const ThemedToastAction: StoryObj = {
+  render: function ThemedToastActionStory() {
+    return (
+      <Stack direction="horizontal" gap={4} wrap="wrap">
+        {(['light', 'dark'] as const).map(mode => (
+          <Theme key={mode} theme={modeAwareToastTheme} mode={mode}>
+            <div {...stylex.props(styles.modeColumn)}>
+              <Stack direction="vertical" gap={2}>
+                <Heading level={4}>{`Root ${mode}`}</Heading>
+                <Toast
+                  type="info"
+                  body="Message archived."
+                  endContent={
+                    <Button label="Undo" variant="secondary" size="sm" />
+                  }
+                  isAutoHide={false}
+                  autoHideDuration={5000}
+                  onDismiss={noop}
+                />
+                <Toast
+                  type="error"
+                  body="Could not archive."
+                  endContent={
+                    <Button label="Retry" variant="secondary" size="sm" />
+                  }
+                  isAutoHide={false}
+                  autoHideDuration={5000}
+                  onDismiss={noop}
+                />
+              </Stack>
+            </div>
+          </Theme>
+        ))}
+      </Stack>
+    );
+  },
+  parameters: {
+    docs: {
+      description: {
+        story:
+          'The card is dark in both app modes, so `light-dark()` and ' +
+          '`onDark` see the same surface on both sides. `themeMode` is what ' +
+          'still differs: the theme sets `--demo-toast-action-bg` per mode on ' +
+          '`toast`, and its `variant:secondary` Button rule reads it behind ' +
+          'the normal background — filled under a light app, ghost under a ' +
+          'dark one. Buttons outside a toast never see the property.',
       },
     },
   },

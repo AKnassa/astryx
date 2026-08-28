@@ -68,7 +68,10 @@ export const docs = {
     },
   ],  theming: {
     targets: [
-      {className: 'astryx-toast', visualProps: ['type']},
+      // `themeMode` is the resolved mode of the Theme the card renders under,
+      // always written with a value ('themeMode:dark'); key external CSS on
+      // [data-theme-mode], not the bare class.
+      {className: 'astryx-toast', visualProps: ['type'], states: ['themeMode']},
     ],
     vars: [
       {
@@ -88,6 +91,7 @@ export const docs = {
       {guidance: true, description: 'Add a short undo action in the endContent slot for reversible operations. Set isAutoHide to false when the action must remain available.'},
       {guidance: true, description: 'Use uniqueID to deduplicate toasts that fire from repeated actions, like clicking a save button multiple times.'},
       {guidance: true, description: 'Use error type for failures that need attention but not immediate action; it persists until dismissed so the user won\'t miss it.'},
+      {guidance: true, description: 'Theme a toast by app color mode through its themeMode state (toast: {\'themeMode:dark\': {...}}) rather than branching on useTheme() in product code; it holds even when the card\'s surface is dark in both modes.'},
       {guidance: false, description: 'Don\'t use a toast for critical errors that block the user. Use Banner for persistent, in-context messaging that requires acknowledgment.'},
       {guidance: false, description: 'Don\'t put long or multi-line content in a toast; it disappears after 5 seconds and the user may not finish reading.'},
       {guidance: false, description: 'Don\'t show form validation errors as toasts. Use inline field validation so the user can see exactly which field needs fixing.'},
@@ -126,6 +130,7 @@ export const docsZh = {
       {guidance: true, description: '在 endContent 插槽中添加简短的撤销操作，用于可逆操作。当操作必须持续可用时，将 isAutoHide 设置为 false。'},
       {guidance: true, description: '使用 uniqueID 去重重复操作触发的 toast，如多次点击保存按钮。'},
       {guidance: true, description: '对需要关注但不需要立即操作的错误使用 error 类型，它会持续显示直到关闭。'},
+      {guidance: true, description: '通过 themeMode 状态（toast: {\'themeMode:dark\': {...}}）按应用配色模式为 toast 设置主题，而不是在产品代码中依据 useTheme() 分支；即使卡片表面在两种模式下都是深色，该规则依然成立。'},
       {guidance: false, description: '不要对阻塞用户的严重错误使用 toast，使用 Banner 进行持久的上下文消息传递。'},
       {guidance: false, description: '不要在 toast 中放置长内容或多行内容，它会在5秒后消失，用户可能来不及阅读。'},
       {guidance: false, description: '不要将表单验证错误显示为 toast，使用内联字段验证让用户看到具体哪个字段需要修复。'},
@@ -141,7 +146,7 @@ export const docsZh = {
 /** @type {import('@astryxdesign/cli/authoring').ComponentTranslationDoc} */
 export const docsDense = {
   description:
-    'toast notification w/ auto-dismiss, stacking, dedup, smooth animations; MediaTheme inverted surface',
+    'toast notification w/ auto-dismiss, stacking, dedup, smooth animations; MediaTheme inverted surface; card reflects resolved Theme mode as themeMode state (light|dark) for app-mode theming',
   usage: {
     description:
       'Brief non-blocking notification for action confirmations and temporary info. Use where user needs feedback not decisions: saves, deletes, status changes. useToast() hook for production (safe-area positioning, responsive message wrapping, stacking, auto-dismiss, dedup via ToastViewport). Set isAutoHide false explicitly for must-remain actions/messages. Toast renders inline for previews/docs/static showcases.',
@@ -150,6 +155,7 @@ export const docsDense = {
       {guidance: true, description: 'Short Undo action in endContent for reversible ops; set isAutoHide false when it must remain available.'},
       {guidance: true, description: 'uniqueID to dedup repeated action toasts.'},
       {guidance: true, description: 'Error type for failures needing attention; persists until dismissed.'},
+      {guidance: true, description: 'Theme by app color mode via themeMode state (toast: {\'themeMode:dark\': {...}}) rather than useTheme() branching in product code; holds even when the card surface is dark in both modes.'},
       {guidance: false, description: 'Don\'t use for critical blocking errors. Use Banner for persistent in-context messaging.'},
       {guidance: false, description: 'Don\'t put long/multi-line content; disappears in 5s, user may not finish reading.'},
       {guidance: false, description: 'Don\'t show form validation errors. Use inline field validation instead.'},
