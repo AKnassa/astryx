@@ -104,6 +104,60 @@ describe('useToast fallback viewport theme mode', () => {
     await dismissAllFallbackToasts();
   });
 
+  it('keeps a Theme inside fallback toast content nested: it never rewrites <html>', async () => {
+    // The fallback root is a separate React root, so a brand Theme in toast
+    // content sees no Theme ancestor. It must not act as the app's root
+    // Theme: <html data-theme> / data-astryx-theme stay the app's, while
+    // the brand Theme still scopes its own subtree.
+    const brand = defineTheme({name: 'fallback-brand', tokens: {}});
+    function BrandedToastButton() {
+      const toast = useToast();
+      return (
+        <button
+          type="button"
+          onClick={() =>
+            toast({
+              body: 'branded',
+              isAutoHide: false,
+              endContent: (
+                <Theme theme={brand} mode="dark">
+                  <span>brand</span>
+                </Theme>
+              ),
+            })
+          }>
+          Trigger branded
+        </button>
+      );
+    }
+
+    render(
+      <Theme theme={testTheme} mode="light">
+        <BrandedToastButton />
+      </Theme>,
+    );
+    await waitFor(() => {
+      expect(document.documentElement).toHaveAttribute('data-theme', 'light');
+    });
+    await act(async () => {
+      fireEvent.click(screen.getByText('Trigger branded'));
+    });
+    await waitFor(() => {
+      expect(screen.getByText('brand')).toBeInTheDocument();
+    });
+    await act(async () => {});
+
+    expect(document.documentElement).toHaveAttribute('data-theme', 'light');
+    expect(document.documentElement).toHaveAttribute(
+      'data-astryx-theme',
+      'test',
+    );
+    const brandScope = document.querySelector(
+      '[data-astryx-toast-fallback] [data-astryx-theme="fallback-brand"]',
+    );
+    expect(brandScope).toHaveAttribute('data-theme', 'dark');
+  });
+
   it('resolves the app mode (light) instead of OS preference (dark) with no LayerProvider', async () => {
     mockMatchMedia(true); // OS prefers dark
 

@@ -89,7 +89,13 @@ const wrapperStyles = stylex.create({
  * The root provider (no parent context) syncs data-theme to <html>.
  * @internal
  */
-const ThemeNestingContext = React.createContext(false);
+/**
+ * True below a Theme. A detached React root that conceptually sits inside
+ * the app (useToast's fallback viewport) provides it as `true` itself, so a
+ * Theme rendered in toast content themes its subtree without claiming
+ * <html> as if it were the app's root Theme.
+ */
+export const ThemeNestingContext = React.createContext(false);
 ThemeNestingContext.displayName = 'ThemeNestingContext';
 
 // =============================================================================
