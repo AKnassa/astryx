@@ -132,6 +132,20 @@ describe('useTheme', () => {
     expect(result.current.mode).toBe('dark');
   });
 
+  it.each(['banana', 'DARK', ''])(
+    'resolves a mode outside light|dark|system ("%s") like system',
+    value => {
+      // A persisted preference read back untyped can hand Theme a stale
+      // string. useMediaQuery is mocked to false (light) at the top of this
+      // file, so "like system" means light here — never the string itself.
+      const {result} = renderHook(() => useTheme(), {
+        wrapper: ({children}) =>
+          wrapper({children, mode: value as 'light' | 'dark' | 'system'}),
+      });
+      expect(result.current.mode).toBe('light');
+    },
+  );
+
   it('provides a tokens map with all resolved values', () => {
     const {result} = renderHook(() => useTheme(), {
       wrapper: ({children}) => wrapper({children, mode: 'light'}),
