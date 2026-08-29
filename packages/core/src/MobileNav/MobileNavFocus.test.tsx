@@ -4,7 +4,7 @@
  * @file MobileNavFocus.test.tsx
  * @input Uses vitest, @testing-library/react, MobileNav + AppShell + SideNav
  * @output Regression tests for focus restoration when the drawer closes
- * @position Testing; validates the focus-restore effect in MobileNav.tsx
+ * @position Testing; validates the focus restore in MobileNav.tsx
  *
  * Repro for the umbrella accessibility issue (#3343): closing the drawer
  * dropped focus to `<body>` instead of returning it to the element that
@@ -21,6 +21,12 @@
  *   drawer. Without this the bug cannot reproduce.
  * - `close()` does NOT hand focus back. That is the behaviour reported
  *   against Safari 26.5.2, and it is what the component must not depend on.
+ *
+ * The native close is deferred past the slide-out (#4290), and the restore has
+ * to follow it: while a modal <dialog> holds the top layer the rest of the
+ * document is inert, so `focus()` on the opener is silently dropped. jsdom has
+ * no top layer and cannot reproduce that, so these tests pin the call order
+ * and the timing directly instead.
  *
  * SYNC: When MobileNav.tsx's focus handling changes, update these tests.
  */
@@ -39,6 +45,7 @@ import {render, screen, fireEvent, act} from '@testing-library/react';
 import {MobileNav} from './MobileNav';
 import {AppShell} from '../AppShell/AppShell';
 import {SideNav, SideNavItem, SideNavSection} from '../SideNav';
+import {stubMatchMedia} from '../__tests__/stubMatchMedia';
 
 beforeAll(() => {
   // Model the dialog focusing steps: showModal() moves focus into the dialog.
@@ -59,26 +66,19 @@ class MockResizeObserver {
   unobserve() {}
   disconnect() {}
 }
-vi.stubGlobal('ResizeObserver', MockResizeObserver);
 
+// AppShell needs its breakpoint query to match, but a blanket `matches: true`
+// would also match `prefers-reduced-motion`, which caps the close delay at 0.
+// The restore has to wait for that delay, so keep the real one in play.
 beforeEach(() => {
-  vi.stubGlobal(
-    'matchMedia',
-    vi.fn().mockReturnValue({
-      matches: true,
-      media: '',
-      onchange: null,
-      addEventListener: vi.fn(),
-      removeEventListener: vi.fn(),
-      addListener: vi.fn(),
-      removeListener: vi.fn(),
-      dispatchEvent: vi.fn(),
-    }),
-  );
+  vi.stubGlobal('ResizeObserver', MockResizeObserver);
+  stubMatchMedia({reduceMotion: false});
 });
 
 afterEach(() => {
+  document.documentElement.style.overflow = '';
   vi.restoreAllMocks();
+  vi.unstubAllGlobals();
 });
 
 /** Controlled standalone harness with a real trigger button. */
@@ -120,6 +120,37 @@ function UnmountHarness() {
         Unmount
       </button>
       {isMounted ? <StandaloneHarness /> : null}
+    </>
+  );
+}
+
+/** The drawer alone can unmount; the trigger stays in the document. */
+function DrawerUnmountHarness() {
+  const [isOpen, setIsOpen] = useState(false);
+  const [hasDrawer, setHasDrawer] = useState(true);
+  return (
+    <>
+      <button
+        type="button"
+        data-testid="trigger"
+        onClick={() => setIsOpen(true)}>
+        Open nav
+      </button>
+      <button
+        type="button"
+        data-testid="unmount-drawer"
+        onClick={() => setHasDrawer(false)}>
+        Unmount drawer
+      </button>
+      {hasDrawer ? (
+        <MobileNav
+          isOpen={isOpen}
+          onOpenChange={setIsOpen}
+          side="start"
+          data-testid="nav">
+          <span>Content</span>
+        </MobileNav>
+      ) : null}
     </>
   );
 }
@@ -188,20 +219,28 @@ function AppShellHarness() {
   );
 }
 
+/** Opens the standalone drawer from a focused trigger and returns the trigger. */
+function openFromTrigger(): HTMLElement {
+  const trigger = screen.getByTestId('trigger');
+  trigger.focus();
+  fireEvent.click(trigger);
+  // showModal() pulled focus into the drawer.
+  expect(trigger).not.toHaveFocus();
+  return trigger;
+}
+
+function clickDrawerClose() {
+  fireEvent.click(screen.getByRole('button', {name: /close navigation/i}));
+}
+
 describe('MobileNav focus restoration', () => {
   it('returns focus to the trigger when the drawer closes (standalone)', () => {
     vi.useFakeTimers();
     try {
       render(<StandaloneHarness />);
+      const trigger = openFromTrigger();
 
-      const trigger = screen.getByTestId('trigger');
-      trigger.focus();
-      fireEvent.click(trigger);
-
-      // showModal() pulled focus into the drawer.
-      expect(trigger).not.toHaveFocus();
-
-      fireEvent.click(screen.getByRole('button', {name: /close/i}));
+      clickDrawerClose();
       act(() => {
         vi.advanceTimersByTime(400);
       });
@@ -223,6 +262,12 @@ describe('MobileNav focus restoration', () => {
 
       expect(toggle).not.toHaveFocus();
 
+      // Inside AppShell the drawer sits in an <Activity> that hides on close,
+      // so the native close is the unmount-style teardown, not the delayed
+      // timer. Focus still has to come back, and still only after close().
+      const closeSpy = vi.spyOn(HTMLDialogElement.prototype, 'close');
+      const focusSpy = vi.spyOn(toggle, 'focus');
+
       fireEvent.click(screen.getByRole('button', {name: /close navigation/i}));
       act(() => {
         vi.advanceTimersByTime(400);
@@ -230,6 +275,10 @@ describe('MobileNav focus restoration', () => {
 
       expect(document.activeElement).not.toBe(document.body);
       expect(toggle).toHaveFocus();
+      expect(closeSpy).toHaveBeenCalled();
+      expect(focusSpy.mock.invocationCallOrder[0]).toBeGreaterThan(
+        closeSpy.mock.invocationCallOrder[0],
+      );
     } finally {
       vi.useRealTimers();
     }
@@ -240,20 +289,18 @@ describe('MobileNav focus restoration', () => {
     // inert while a modal <dialog> is open, so focusing the trigger before
     // close() would be silently dropped — the exact class of failure this fix
     // exists to remove. jsdom has no top layer and cannot reproduce that, so
-    // assert the call order directly instead. Reordering the focus-restore
-    // effect above the open/close effect in MobileNav.tsx breaks this.
+    // assert the call order directly instead. Restoring when `isOpen` flips
+    // (in an effect or its cleanup) instead of after the deferred close()
+    // breaks this.
     vi.useFakeTimers();
     try {
       render(<StandaloneHarness />);
-
-      const trigger = screen.getByTestId('trigger');
-      trigger.focus();
-      fireEvent.click(trigger);
+      const trigger = openFromTrigger();
 
       const closeSpy = vi.spyOn(HTMLDialogElement.prototype, 'close');
       const focusSpy = vi.spyOn(trigger, 'focus');
 
-      fireEvent.click(screen.getByRole('button', {name: /close/i}));
+      clickDrawerClose();
       act(() => {
         vi.advanceTimersByTime(400);
       });
@@ -268,21 +315,139 @@ describe('MobileNav focus restoration', () => {
     }
   });
 
+  it('waits for the delayed close before restoring focus', () => {
+    // The close is deferred so the slide-out can play (250ms cap outside
+    // reduced motion). Until it runs the dialog is still modal and the trigger
+    // is inert, so an early restore would be a silent no-op in a browser.
+    vi.useFakeTimers();
+    try {
+      render(<StandaloneHarness />);
+      const trigger = openFromTrigger();
+      const closeSpy = vi.spyOn(HTMLDialogElement.prototype, 'close');
+
+      clickDrawerClose();
+      act(() => {
+        vi.advanceTimersByTime(200);
+      });
+
+      expect(closeSpy).not.toHaveBeenCalled();
+      expect(screen.getByTestId('nav')).toHaveAttribute('open');
+      expect(trigger).not.toHaveFocus();
+
+      act(() => {
+        vi.advanceTimersByTime(100);
+      });
+
+      expect(closeSpy).toHaveBeenCalledTimes(1);
+      expect(trigger).toHaveFocus();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('keeps focus in the drawer when it is reopened before the delayed close', () => {
+    vi.useFakeTimers();
+    try {
+      render(<StandaloneHarness />);
+      const trigger = openFromTrigger();
+      const focusSpy = vi.spyOn(trigger, 'focus');
+
+      clickDrawerClose();
+      act(() => {
+        vi.advanceTimersByTime(100);
+      });
+      // Reopened while the close was still pending: the dialog never closed,
+      // so there is nothing to hand focus back from.
+      fireEvent.click(trigger);
+      act(() => {
+        vi.advanceTimersByTime(400);
+      });
+
+      expect(screen.getByTestId('nav')).toHaveAttribute('open');
+      expect(focusSpy).not.toHaveBeenCalled();
+      expect(trigger).not.toHaveFocus();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('returns focus to the original opener after a reopen interrupted the close', () => {
+    vi.useFakeTimers();
+    try {
+      render(<StandaloneHarness />);
+      const trigger = openFromTrigger();
+
+      clickDrawerClose();
+      act(() => {
+        vi.advanceTimersByTime(100);
+      });
+      // The reopen happens with focus inside the drawer. That element must
+      // not replace the opener the drawer captured on the way in.
+      fireEvent.click(trigger);
+      act(() => {
+        vi.advanceTimersByTime(400);
+      });
+      expect(trigger).not.toHaveFocus();
+
+      clickDrawerClose();
+      act(() => {
+        vi.advanceTimersByTime(400);
+      });
+
+      expect(screen.getByTestId('nav')).not.toHaveAttribute('open');
+      expect(trigger).toHaveFocus();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('restores focus when the drawer unmounts while its delayed close is pending', () => {
+    vi.useFakeTimers();
+    try {
+      render(<DrawerUnmountHarness />);
+      const trigger = openFromTrigger();
+      const closeSpy = vi.spyOn(HTMLDialogElement.prototype, 'close');
+      const focusSpy = vi.spyOn(trigger, 'focus');
+
+      clickDrawerClose();
+      act(() => {
+        vi.advanceTimersByTime(100);
+      });
+      expect(closeSpy).not.toHaveBeenCalled();
+
+      // Unmounting cancels the timer and closes the dialog on the spot. Focus
+      // goes back to the trigger from that close, and only after it.
+      fireEvent.click(screen.getByTestId('unmount-drawer'));
+
+      expect(screen.queryByTestId('nav')).toBeNull();
+      expect(closeSpy).toHaveBeenCalledTimes(1);
+      expect(trigger).toHaveFocus();
+      expect(focusSpy.mock.invocationCallOrder[0]).toBeGreaterThan(
+        closeSpy.mock.invocationCallOrder[0],
+      );
+
+      // The cancelled timer must not fire a second close later.
+      act(() => {
+        vi.advanceTimersByTime(400);
+      });
+      expect(closeSpy).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('returns focus to the trigger even when focus moved inside the drawer first', () => {
     vi.useFakeTimers();
     try {
       render(<StandaloneHarness />);
-
-      const trigger = screen.getByTestId('trigger');
-      trigger.focus();
-      fireEvent.click(trigger);
+      const trigger = openFromTrigger();
 
       // User tabs to a link inside the drawer before dismissing it.
       const link = screen.getByTestId('nav-link');
       link.focus();
       expect(link).toHaveFocus();
 
-      fireEvent.click(screen.getByRole('button', {name: /close/i}));
+      clickDrawerClose();
       act(() => {
         vi.advanceTimersByTime(400);
       });
@@ -297,10 +462,7 @@ describe('MobileNav focus restoration', () => {
     vi.useFakeTimers();
     try {
       render(<StandaloneHarness />);
-
-      const trigger = screen.getByTestId('trigger');
-      trigger.focus();
-      fireEvent.click(trigger);
+      const trigger = openFromTrigger();
 
       const dialog = screen.getByTestId('nav');
       fireEvent(
@@ -321,11 +483,7 @@ describe('MobileNav focus restoration', () => {
     vi.useFakeTimers();
     try {
       render(<UnmountHarness />);
-
-      const trigger = screen.getByTestId('trigger');
-      trigger.focus();
-      fireEvent.click(trigger);
-      expect(trigger).not.toHaveFocus();
+      openFromTrigger();
 
       // Unmounting the whole drawer subtree also takes the trigger with it —
       // the restore must not throw and must not force focus onto a detached
@@ -346,10 +504,7 @@ describe('MobileNav focus restoration', () => {
     vi.useFakeTimers();
     try {
       render(<DetachHarness />);
-
-      const trigger = screen.getByTestId('trigger');
-      trigger.focus();
-      fireEvent.click(trigger);
+      const trigger = openFromTrigger();
 
       // jsdom silently ignores focus() on a detached node, so assert the call
       // is never made rather than assert on activeElement.
@@ -385,7 +540,7 @@ describe('MobileNav focus restoration', () => {
       // implementations apart. Spy on the call itself — in a real browser
       // body.focus() DOES blur whatever is focused.
       const bodyFocus = vi.spyOn(document.body, 'focus');
-      fireEvent.click(screen.getByRole('button', {name: /close/i}));
+      clickDrawerClose();
       act(() => {
         vi.advanceTimersByTime(400);
       });
