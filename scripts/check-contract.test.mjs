@@ -12,17 +12,25 @@
  * Policy is SUBSET, not equality: every public source prop must be documented.
  * Docs may list more (forwarded subcomponent props). Required/optional and
  * phantom-doc props are out of scope for v1.
+ *
+ * Edge classes pinned after the original set: union member-only props,
+ * intersection redeclares (either constituent order), `@types/react`
+ * inheritance, generic and key-remapped Props, `__tests__/` leakage, docs
+ * that cannot be loaded or export no `docs`, report order under any
+ * directory read order, and the `run()` exit codes CI sees — including a
+ * zero-doc scan failing rather than passing.
  */
 
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import {describe, it, expect, afterEach} from 'vitest';
+import {describe, it, expect, afterEach, vi} from 'vitest';
 import {
   isSkippedProp,
   documentedPropNames,
   findUndocumented,
   checkContract,
+  run,
 } from './check-contract.mjs';
 
 const tmpDirs = [];
@@ -225,7 +233,9 @@ describe('checkContract — public props derived from the type checker', () => {
       .map(m => m.prop)
       .sort();
     expect(props).toEqual(expect.arrayContaining(['label', 'href']));
-    expect(props).not.toEqual(expect.arrayContaining(['isIconOnly', 'children']));
+    expect(props).not.toEqual(
+      expect.arrayContaining(['isIconOnly', 'children']),
+    );
   });
 
   it('accepts extra documented props (subset policy)', async () => {
@@ -334,7 +344,9 @@ describe('checkContract — public props derived from the type checker', () => {
     });
     const {missing, unresolved} = await checkContract(src);
     expect(missing).toEqual([]);
-    expect(unresolved.some(u => u.component === 'useTableSortable')).toBe(false);
+    expect(unresolved.some(u => u.component === 'useTableSortable')).toBe(
+      false,
+    );
   });
 
   it('records unresolved when a component doc has props[] but no matching {Name}Props', async () => {
@@ -350,9 +362,7 @@ describe('checkContract — public props derived from the type checker', () => {
     const {missing, unresolved} = await checkContract(src);
     expect(missing).toEqual([]);
     expect(unresolved).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({component: 'Widget'}),
-      ]),
+      expect.arrayContaining([expect.objectContaining({component: 'Widget'})]),
     );
   });
 
@@ -562,5 +572,430 @@ describe('documentedPropNames / findUndocumented — empty and nameless input', 
 
   it('returns empty when the source side is empty, even if docs list extras', () => {
     expect(findUndocumented([], ['label'])).toEqual([]);
+  });
+});
+
+describe('checkContract — union, intersection, and inheritance edges', () => {
+  it('requires a prop that only one member of a union {Name}Props declares (Slider range mode)', async () => {
+    const src = fixture({
+      'BaseProps.ts': BASE_PROPS,
+      'Slider/Slider.tsx': `
+        import type {BaseProps} from '../BaseProps';
+        export interface SliderBaseProps extends BaseProps {
+          step?: number;
+        }
+        export interface SliderSingleProps extends SliderBaseProps {
+          value: number;
+        }
+        export interface SliderRangeProps extends SliderBaseProps {
+          value: [number, number];
+          minStepsBetweenThumbs?: number;
+        }
+        export type SliderProps = SliderSingleProps | SliderRangeProps;
+      `,
+      'Slider/Slider.doc.mjs': `
+        export const docs = {
+          name: 'Slider',
+          props: [
+            {name: 'step', type: 'number', description: 'Increment'},
+            {name: 'value', type: 'number | [number, number]', description: 'Current value'},
+          ],
+        };
+      `,
+    });
+    const {missing} = await checkContract(src);
+    expect(missing).toEqual([
+      expect.objectContaining({
+        component: 'Slider',
+        prop: 'minStepsBetweenThumbs',
+      }),
+    ]);
+  });
+
+  it('requires a prop redeclared over BaseProps in an intersection, whichever side BaseProps is on', async () => {
+    const src = fixture({
+      'BaseProps.ts': BASE_PROPS,
+      'Widget/Widget.tsx': `
+        import type {BaseProps} from '../BaseProps';
+        export type WidgetProps = BaseProps & {
+          label: string;
+          /** Component-owned, not the BaseProps passthrough. */
+          onClick?: () => void;
+        };
+      `,
+      'Gadget/Gadget.tsx': `
+        import type {BaseProps} from '../BaseProps';
+        export type GadgetProps = {
+          label: string;
+          onClick?: () => void;
+        } & BaseProps;
+      `,
+      'Widget/Widget.doc.mjs': `
+        export const docs = {
+          name: 'Widget',
+          props: [{name: 'label', type: 'string', description: 'Visible text'}],
+        };
+      `,
+      'Gadget/Gadget.doc.mjs': `
+        export const docs = {
+          name: 'Gadget',
+          props: [{name: 'label', type: 'string', description: 'Visible text'}],
+        };
+      `,
+    });
+    const {missing} = await checkContract(src);
+    expect(missing).toEqual([
+      expect.objectContaining({component: 'Gadget', prop: 'onClick'}),
+      expect.objectContaining({component: 'Widget', prop: 'onClick'}),
+    ]);
+  });
+});
+
+describe('checkContract — doc loading and report determinism', () => {
+  it('reports a .doc.mjs that exports neither `docs` nor a default, instead of silently skipping it', async () => {
+    const src = fixture({
+      'BaseProps.ts': BASE_PROPS,
+      'Widget/Widget.tsx': `
+        import type {BaseProps} from '../BaseProps';
+        export interface WidgetProps extends BaseProps {
+          label: string;
+        }
+      `,
+      'Widget/Widget.doc.mjs': `
+        export const doc = {
+          name: 'Widget',
+          props: [{name: 'label', type: 'string', description: 'Visible text'}],
+        };
+      `,
+    });
+    const {unreadable, missing} = await checkContract(src);
+    expect(unreadable).toEqual([
+      expect.objectContaining({
+        file: expect.stringContaining('Widget.doc.mjs'),
+        reason: expect.stringMatching(/docs/),
+      }),
+    ]);
+    expect(missing).toEqual([]);
+  });
+
+  it('sorts missing and unresolved by name, not by directory read order', async () => {
+    const src = fixture({
+      'BaseProps.ts': BASE_PROPS,
+      'Alpha/Alpha.doc.mjs': `
+        export const docs = {name: 'Alpha', props: [{name: 'x', type: 'string', description: 'x'}]};
+      `,
+      'Beta/Beta.doc.mjs': `
+        export const docs = {name: 'Beta', props: [{name: 'x', type: 'string', description: 'x'}]};
+      `,
+      'Yak/Yak.tsx': `export interface YakProps { b: string; a: string }`,
+      'Yak/Yak.doc.mjs': `export const docs = {name: 'Yak', props: []};`,
+      'Zed/Zed.tsx': `export interface ZedProps { z: string }`,
+      'Zed/Zed.doc.mjs': `export const docs = {name: 'Zed', props: []};`,
+    });
+    const natural = fs.readdirSync.bind(fs);
+    const reversed = (dir, opts) => {
+      const entries = natural(dir, opts);
+      return String(dir).startsWith(src) ? [...entries].reverse() : entries;
+    };
+    const spy = vi.spyOn(fs, 'readdirSync');
+    try {
+      for (const walkOrder of [natural, reversed]) {
+        spy.mockImplementation(walkOrder);
+        const {missing, unresolved} = await checkContract(src);
+        expect(missing.map(m => `${m.component}.${m.prop}`)).toEqual([
+          'Yak.a',
+          'Yak.b',
+          'Zed.z',
+        ]);
+        expect(unresolved.map(u => u.component)).toEqual(['Alpha', 'Beta']);
+      }
+    } finally {
+      spy.mockRestore();
+    }
+  });
+});
+
+describe('run — the CI-facing report', () => {
+  function capture() {
+    const out = {log: [], error: []};
+    return {
+      out,
+      io: {
+        log: line => out.log.push(line),
+        error: line => out.error.push(line),
+      },
+    };
+  }
+
+  it('prints each undocumented prop with its doc path and returns 1', async () => {
+    const src = fixture({
+      'BaseProps.ts': BASE_PROPS,
+      'Widget/Widget.tsx': `
+        import type {BaseProps} from '../BaseProps';
+        export interface WidgetProps extends BaseProps {
+          label: string;
+          width?: string;
+        }
+      `,
+      'Widget/Widget.doc.mjs': `
+        export const docs = {
+          name: 'Widget',
+          props: [{name: 'label', type: 'string', description: 'Visible text'}],
+        };
+      `,
+    });
+    const {out, io} = capture();
+    await expect(run(src, io)).resolves.toBe(1);
+    expect(out.error.join('\n')).toMatch(/1 undocumented public prop/);
+    expect(out.error.join('\n')).toMatch(
+      /Widget\.width\s+\(.*Widget\.doc\.mjs\)/,
+    );
+    expect(out.log).toEqual([]);
+  });
+
+  it('returns 1 when the scan finds no .doc.mjs at all — an empty scan is a misconfigured gate, not a pass', async () => {
+    const src = fixture({'BaseProps.ts': BASE_PROPS});
+    const {out, io} = capture();
+    await expect(run(src, io)).resolves.toBe(1);
+    expect(out.error.join('\n')).toMatch(/no \.doc\.mjs/);
+    expect(out.log).toEqual([]);
+  });
+
+  it('returns 0 with the checked count and lists unresolved {Name}Props as informational', async () => {
+    const src = fixture({
+      'BaseProps.ts': BASE_PROPS,
+      'Widget/Widget.tsx': `
+        import type {BaseProps} from '../BaseProps';
+        export interface WidgetProps extends BaseProps {
+          label: string;
+        }
+      `,
+      'Widget/Widget.doc.mjs': `
+        export const docs = {
+          name: 'Widget',
+          props: [{name: 'label', type: 'string', description: 'Visible text'}],
+        };
+      `,
+      'Ghost/Ghost.doc.mjs': `
+        export const docs = {
+          name: 'Ghost',
+          props: [{name: 'boo', type: 'string', description: 'No GhostProps in source'}],
+        };
+      `,
+    });
+    const {out, io} = capture();
+    await expect(run(src, io)).resolves.toBe(0);
+    expect(out.log).toEqual([
+      '✓ check:contract — 2 doc(s) checked, 0 undocumented public props; 1 unresolved {Name}Props (informational)',
+      '  · Ghost: no resolvable GhostProps in source',
+    ]);
+    expect(out.error).toEqual([]);
+  });
+
+  it('returns 1 and names the file and reason when a doc cannot be loaded', async () => {
+    const src = fixture({
+      'BaseProps.ts': BASE_PROPS,
+      'Widget/Widget.doc.mjs': `export const docs = {`,
+    });
+    const {out, io} = capture();
+    await expect(run(src, io)).resolves.toBe(1);
+    const report = out.error.join('\n');
+    expect(report).toMatch(/could not load 1 doc file\(s\)/);
+    expect(report).toMatch(/Widget\.doc\.mjs\n\s+\S/);
+    expect(report).toMatch(/A broken doc is not skipped/);
+    expect(out.log).toEqual([]);
+  });
+});
+
+describe('checkContract — inheritance and file-walk edges', () => {
+  it('requires onClick when the component interface redeclares it over BaseProps', async () => {
+    const src = fixture({
+      'BaseProps.ts': BASE_PROPS,
+      'Widget/Widget.tsx': `
+        import type {BaseProps} from '../BaseProps';
+        export interface WidgetProps extends BaseProps {
+          label: string;
+          /** Component-owned: part of the documented contract. */
+          onClick?: () => void;
+        }
+      `,
+      'Widget/Widget.doc.mjs': `
+        export const docs = {
+          name: 'Widget',
+          props: [{name: 'label', type: 'string', description: 'Visible text'}],
+        };
+      `,
+    });
+    const {missing} = await checkContract(src);
+    expect(missing).toEqual([
+      expect.objectContaining({component: 'Widget', prop: 'onClick'}),
+    ]);
+  });
+
+  it('does not require BaseProps passthrough that arrives through Omit<ParentProps>', async () => {
+    const src = fixture({
+      'BaseProps.ts': BASE_PROPS,
+      'Button/Button.tsx': `
+        import type {BaseProps} from '../BaseProps';
+        export interface ButtonProps extends BaseProps {
+          label: string;
+          href?: string;
+          isIconOnly?: boolean;
+        }
+      `,
+      'IconButton/IconButton.tsx': `
+        import type {ButtonProps} from '../Button/Button';
+        export interface IconButtonProps extends Omit<ButtonProps, 'isIconOnly'> {
+          icon: unknown;
+        }
+      `,
+      'IconButton/IconButton.doc.mjs': `
+        export const docs = {
+          name: 'IconButton',
+          props: [{name: 'icon', type: 'unknown', description: 'Glyph'}],
+        };
+      `,
+    });
+    const {missing} = await checkContract(src);
+    expect(missing.map(m => m.prop)).toEqual(['href', 'label']);
+  });
+
+  it('does not require attributes inherited from @types/react (HTMLAttributes)', async () => {
+    const src = fixture({
+      'node_modules/@types/react/index.d.ts': `
+        export interface HTMLAttributes<T> {
+          id?: string;
+          role?: string;
+          'aria-label'?: string;
+          onKeyDown?: (event: T) => void;
+        }
+      `,
+      'Widget/Widget.tsx': `
+        import type {HTMLAttributes} from 'react';
+        export interface WidgetProps extends HTMLAttributes<unknown> {
+          label: string;
+        }
+      `,
+      'Widget/Widget.doc.mjs': `
+        export const docs = {
+          name: 'Widget',
+          props: [{name: 'label', type: 'string', description: 'Visible text'}],
+        };
+      `,
+    });
+    const {missing, unresolved} = await checkContract(src);
+    expect(unresolved).toEqual([]);
+    expect(missing).toEqual([]);
+  });
+
+  it('derives props from a generic {Name}Props, interface or alias', async () => {
+    const src = fixture({
+      'BaseProps.ts': BASE_PROPS,
+      'Widget/Widget.tsx': `
+        import type {BaseProps} from '../BaseProps';
+        export interface WidgetProps<T> extends BaseProps {
+          value: T;
+          onChange?: (next: T) => void;
+        }
+      `,
+      'Gadget/Gadget.tsx': `
+        export type GadgetProps<T = string> = {
+          items: T[];
+          label: string;
+        };
+      `,
+      'Widget/Widget.doc.mjs': `
+        export const docs = {
+          name: 'Widget',
+          props: [{name: 'value', type: 'T', description: 'Current value'}],
+        };
+      `,
+      'Gadget/Gadget.doc.mjs': `
+        export const docs = {
+          name: 'Gadget',
+          props: [{name: 'items', type: 'T[]', description: 'Rows'}],
+        };
+      `,
+    });
+    const {missing} = await checkContract(src);
+    expect(missing.map(m => `${m.component}.${m.prop}`)).toEqual([
+      'Gadget.label',
+      'Widget.onChange',
+    ]);
+  });
+
+  it('ignores a {Name}Props declared under __tests__/ (unresolved, not a leaked contract)', async () => {
+    const src = fixture({
+      'BaseProps.ts': BASE_PROPS,
+      'Widget/__tests__/Widget.tsx': `
+        export interface WidgetProps { leakedFromTestDir: string }
+      `,
+      'Widget/Widget.doc.mjs': `
+        export const docs = {
+          name: 'Widget',
+          props: [],
+        };
+      `,
+    });
+    const {missing, unresolved} = await checkContract(src);
+    expect(missing).toEqual([]);
+    expect(unresolved).toEqual([
+      expect.objectContaining({component: 'Widget'}),
+    ]);
+  });
+
+  it('reports a doc whose import fails at runtime and still checks the other docs', async () => {
+    const src = fixture({
+      'BaseProps.ts': BASE_PROPS,
+      'Broken/Broken.tsx': `export interface BrokenProps { a: string }`,
+      'Broken/Broken.doc.mjs': `
+        import {shared} from './shared-examples.mjs';
+        export const docs = {name: 'Broken', props: shared};
+      `,
+      'Widget/Widget.tsx': `
+        import type {BaseProps} from '../BaseProps';
+        export interface WidgetProps extends BaseProps {
+          label: string;
+          width?: string;
+        }
+      `,
+      'Widget/Widget.doc.mjs': `
+        export const docs = {
+          name: 'Widget',
+          props: [{name: 'label', type: 'string', description: 'Visible text'}],
+        };
+      `,
+    });
+    const {unreadable, missing} = await checkContract(src);
+    expect(unreadable).toEqual([
+      expect.objectContaining({
+        file: expect.stringContaining('Broken.doc.mjs'),
+        reason: expect.stringContaining('shared-examples'),
+      }),
+    ]);
+    expect(missing).toEqual([
+      expect.objectContaining({component: 'Widget', prop: 'width'}),
+    ]);
+  });
+
+  it('requires declaration-less props from a key-remapped mapped type (they are component API)', async () => {
+    const src = fixture({
+      'BaseProps.ts': BASE_PROPS,
+      'Widget/Widget.tsx': `
+        import type {BaseProps} from '../BaseProps';
+        type Phase = 'open' | 'close';
+        export type WidgetProps = BaseProps & {
+          [K in Phase as \`on\${Capitalize<K>}\`]?: () => void;
+        } & {label: string};
+      `,
+      'Widget/Widget.doc.mjs': `
+        export const docs = {
+          name: 'Widget',
+          props: [{name: 'label', type: 'string', description: 'Visible text'}],
+        };
+      `,
+    });
+    const {missing} = await checkContract(src);
+    expect(missing.map(m => m.prop)).toEqual(['onClose', 'onOpen']);
   });
 });

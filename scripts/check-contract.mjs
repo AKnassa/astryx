@@ -29,8 +29,15 @@
  * filtering by name regex would hide it.
  *
  * Key lookup uses one `ts.Program` over the source tree so `extends` /
- * `Omit` / `Pick` / unions resolve. A program-per-file is correct but ~40×
- * slower.
+ * `Omit` / `Pick` resolve. A program-per-file is correct but ~40× slower.
+ * A union `{Name}Props` (`SliderSingleProps | SliderRangeProps`) is walked
+ * per member, since the union's own property list holds only the common
+ * props. A prop is platform passthrough only when every declaration behind
+ * it is platform — an intersection redeclaring `onClick` over BaseProps
+ * carries both declarations and stays public.
+ *
+ * The scan itself is gated: zero `.doc.mjs` found, or a doc that cannot be
+ * imported or exports no `docs`, fails the run instead of passing vacuously.
  *
  * Not yet in `check:repo`: core still has pre-existing drift this gate
  * reports. Wire it next to `check:i18n-catalog` once that count is zero
@@ -153,6 +160,21 @@ export function buildProgram(filePaths) {
   return {program, checker: program.getTypeChecker()};
 }
 
+/**
+ * Property symbols of `type`. On a union (`SliderSingleProps |
+ * SliderRangeProps`) `getProperties()` reports only the members' common
+ * props, so a variant-only prop (`minStepsBetweenThumbs`) would never be
+ * required. Walk each member instead.
+ *
+ * @param {import('typescript').Type} type
+ * @returns {import('typescript').Symbol[]}
+ */
+function propertySymbols(type) {
+  return type.isUnion()
+    ? type.types.flatMap(propertySymbols)
+    : type.getProperties();
+}
+
 function isInheritedPlatformDecl(declFile) {
   return /\/BaseProps\.ts$|node_modules|[\\/]lib\.dom|@types\/react/.test(
     declFile,
@@ -193,20 +215,29 @@ export function extractPublicPropNames(
   }
   if (matches.length === 0) return null;
 
-  const prefix = preferDir.endsWith(path.sep) ? preferDir : preferDir + path.sep;
+  const prefix = preferDir.endsWith(path.sep)
+    ? preferDir
+    : preferDir + path.sep;
   const target =
     matches.find(node => node.getSourceFile().fileName.startsWith(prefix)) ??
     matches[0];
 
   const type = checker.getTypeAtLocation(target);
   const props = new Set();
-  for (const symbol of type.getProperties()) {
+  for (const symbol of propertySymbols(type)) {
     const name = symbol.getName();
     if (name.startsWith('__')) continue;
     if (isSkippedProp(name)) continue;
-    const decl = (symbol.getDeclarations() ?? [])[0];
-    const declFile = decl?.getSourceFile()?.fileName ?? '';
-    if (isInheritedPlatformDecl(declFile)) continue;
+    // An intersection (`BaseProps & {onClick}`) yields one synthetic symbol
+    // carrying every constituent's declaration; a prop is passthrough only
+    // when all of them are platform. A declaration-less (remapped) prop is
+    // component API.
+    const declFiles = (symbol.getDeclarations() ?? []).map(
+      decl => decl.getSourceFile().fileName,
+    );
+    if (declFiles.length > 0 && declFiles.every(isInheritedPlatformDecl)) {
+      continue;
+    }
     props.add(name);
   }
   return props;
@@ -265,7 +296,14 @@ export async function checkContract(srcDir) {
       continue;
     }
     const docs = mod.default ?? mod.docs;
-    if (!docs?.name) continue;
+    if (!docs) {
+      unreadable.push({
+        file: docFile,
+        reason: 'exports neither `docs` nor a default export',
+      });
+      continue;
+    }
+    if (!docs.name) continue;
     // Hooks document params/returns, not props.
     if (docs.name.startsWith('use') && !Array.isArray(docs.props)) continue;
 
@@ -291,58 +329,88 @@ export async function checkContract(srcDir) {
   }
 
   missing.sort(
-    (a, b) => a.component.localeCompare(b.component) || a.prop.localeCompare(b.prop),
+    (a, b) =>
+      a.component.localeCompare(b.component) || a.prop.localeCompare(b.prop),
+  );
+  unresolved.sort(
+    (a, b) =>
+      a.component.localeCompare(b.component) || a.file.localeCompare(b.file),
   );
   unreadable.sort((a, b) => a.file.localeCompare(b.file));
   return {missing, unresolved, unreadable, docCount: docFiles.length};
 }
 
-async function main() {
+/**
+ * Scan `srcDir`, print the report through `io`, return the exit code. The
+ * CLI entry below passes `console`; tests pass a capturing `io` instead of
+ * spawning a process.
+ *
+ * @param {string} [srcDir]
+ * @param {{log?: (line: string) => void, error?: (line: string) => void}} [io]
+ * @returns {Promise<0 | 1>}
+ */
+export async function run(
+  srcDir = CORE_SRC,
+  {log = console.log, error = console.error} = {},
+) {
   const {missing, unresolved, unreadable, docCount} =
-    await checkContract(CORE_SRC);
+    await checkContract(srcDir);
+
+  if (docCount === 0) {
+    error(
+      `\n✗ check:contract found no .doc.mjs under ${path.relative(ROOT, srcDir) || '.'} — nothing was checked, so this is not a pass.\n`,
+    );
+    return 1;
+  }
 
   if (unreadable.length > 0 || missing.length > 0) {
     if (unreadable.length > 0) {
-      console.error(
+      error(
         `\n✗ check:contract could not load ${unreadable.length} doc file(s):\n`,
       );
       for (const {file, reason} of unreadable) {
-        console.error(`  ${path.relative(ROOT, file)}`);
-        console.error(`    ${reason}`);
+        error(`  ${path.relative(ROOT, file)}`);
+        error(`    ${reason}`);
       }
-      console.error(
-        '\n    → Fix the syntax/import error in that .doc.mjs. A broken doc is not skipped.\n',
+      error(
+        '\n    → Fix the syntax, import, or `docs` export of that .doc.mjs. A broken doc is not skipped.\n',
       );
     }
     if (missing.length > 0) {
-      console.error(
+      error(
         `\n✗ check:contract found ${missing.length} undocumented public prop(s):\n`,
       );
       for (const {component, prop, file} of missing) {
         const rel = path.relative(ROOT, file);
-        console.error(`  ${component}.${prop}  (${rel})`);
+        error(`  ${component}.${prop}  (${rel})`);
       }
-      console.error(
-        '\n    → Document the prop in that component\'s .doc.mjs `props[]`, or it is not part of the public contract.\n',
+      error(
+        "\n    → Document the prop in that component's .doc.mjs `props[]`, or it is not part of the public contract.\n",
       );
     }
-    process.exit(1);
+    return 1;
   }
 
-  console.log(
+  log(
     `✓ check:contract — ${docCount} doc(s) checked, 0 undocumented public props` +
       (unresolved.length > 0
         ? `; ${unresolved.length} unresolved {Name}Props (informational)`
         : ''),
   );
   for (const {component} of unresolved) {
-    console.log(`  · ${component}: no resolvable ${component}Props in source`);
+    log(`  · ${component}: no resolvable ${component}Props in source`);
   }
+  return 0;
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
-  main().catch(err => {
-    console.error(err);
-    process.exit(2);
-  });
+  run().then(
+    code => {
+      process.exitCode = code;
+    },
+    err => {
+      console.error(err);
+      process.exitCode = 2;
+    },
+  );
 }
