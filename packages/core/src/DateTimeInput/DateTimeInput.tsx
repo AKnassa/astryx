@@ -4,20 +4,20 @@
 
 /**
  * @file DateTimeInput.tsx
- * @input Uses React, Field, Calendar, usePopover, useAnnounce, time parsing utilities
+ * @input Uses React, Field, Calendar, usePopover, useAnnounce, time parsing utilities, TouchDateTimeField, StyleX intrinsic flex layout
  * @output Exports DateTimeInput component, DateTimeInputProps
  * @position Core implementation; consumed by index.ts, tested by DateTimeInput.test.tsx
  *
  * SYNC: When modified, update these files to stay in sync:
  * - /packages/core/src/DateTimeInput/DateTimeInput.doc.mjs (props table, features, implementation notes)
- * - /packages/core/src/DateTimeInput/DateTimeInput.test.tsx (tests for new/changed behavior)
+ * - /packages/core/src/DateTimeInput/DateTimeInput.test.tsx (desktop tests for new/changed behavior)
+ * - /packages/core/src/DateTimeInput/DateTimeInputTouch.test.tsx (touch-surface tests)
  * - /packages/core/src/DateTimeInput/index.ts (exports if types change)
  * - /apps/storybook/stories/DateTimeInput.stories.tsx (storybook stories)
  * - /packages/cli/assets/templates/blocks/components/DateTimeInput/ (showcase blocks)
  */
 
 import {
-  use,
   useId,
   useState,
   useCallback,
@@ -38,7 +38,6 @@ import {
   typographyVars,
   typeScaleVars,
   fontWeightVars,
-  borderVars,
 } from '../theme/tokens.stylex';
 import {
   Field,
@@ -88,13 +87,15 @@ import {
 import type {BaseProps} from '../BaseProps';
 import type {SizeValue} from '../utils/types';
 import {useAnnounce} from '../hooks/useAnnounce';
+import {useMediaQuery} from '../hooks/useMediaQuery';
 import {useResolvedRequired} from '../hooks/useResolvedRequired';
 import {useSize} from '../SizeContext/SizeContext';
 import {themeProps} from '../utils/themeProps';
 import {focusOutlineStyles} from '../utils/focusOutline.stylex';
-import {useTranslator, InternationalizationContext} from '../i18n';
+import {useLocale, useTranslator} from '../i18n';
 
 import {useMergedRefs} from '../hooks/useMergedRefs';
+import {TouchDateTimeField} from './TouchDateTimeField';
 export type ISODateTimeString = string & {
   readonly __brand: 'ISODateTimeString';
 };
@@ -117,9 +118,14 @@ export type {
   InputStatusType as DateTimeInputStatusType,
 } from '../Field';
 
+// Two 196px segments plus the 8px gap fit at exactly 400px. Below that,
+// flex wrapping moves each growing segment onto its own full-width row.
+const HORIZONTAL_SEGMENT_BASIS = 196;
+
 const styles = stylex.create({
   row: {
     display: 'flex',
+    flexWrap: 'wrap',
     gap: spacingVars['--spacing-2'],
   },
   iconButton: {
@@ -174,11 +180,13 @@ const styles = stylex.create({
   },
   dateWrapper: {
     flex: 1,
-    flexBasis: 0,
+    flexBasis: HORIZONTAL_SEGMENT_BASIS,
+    minWidth: 0,
   },
   timeWrapper: {
     flex: 1,
-    flexBasis: 0,
+    flexBasis: HORIZONTAL_SEGMENT_BASIS,
+    minWidth: 0,
   },
   // Preset-time list. Paddings and states mirror BaseTypeahead's dropdown and
   // Selector's options so every list in the system reads the same.
@@ -362,25 +370,28 @@ export interface DateTimeInputProps extends Omit<
   hourFormat?: DateTimeInputHourFormat;
 
   /**
-   * Minutes added or subtracted when stepping the time field with the arrow
-   * keys. Constrained to a set of sensible increments.
+   * Minutes added or subtracted when stepping the desktop time field with the
+   * arrow keys. Ignored on the mobile touch sheet, where time is changed with
+   * wheels. Constrained to a set of sensible increments.
    * @default 1
    */
   timeIncrement?: DateTimeInputTimeIncrement;
 
   /**
-   * Minute cadence for a dropdown of preset times on the time field. Set it to
-   * turn the time field into a combobox listing every valid time at that
+   * Minute cadence for a dropdown of preset times on the desktop time field. Set
+   * it to turn the time field into a combobox listing every valid time at that
    * cadence (`60` gives the 12 AM - 11 PM list, `15` a quarter-hour list).
    *
-   * Omitted, the time field stays a plain text input: typed entry and
+   * Omitted, the desktop time field stays a plain text input: typed entry and
    * arrow-key stepping only, with no combobox semantics added to the
-   * accessibility tree. Typed entry keeps working when the dropdown is on —
-   * the list is a shortcut, not a restriction, so a time between two options
-   * can still be typed.
+   * accessibility tree. Typed entry keeps working when the dropdown is on — the
+   * list is a shortcut, not a restriction, so a time between two options can
+   * still be typed.
    *
-   * Independent of `timeIncrement`, which governs arrow-key stepping. Setting
-   * both to the same value is the usual choice for scheduling flows.
+   * Ignored on the mobile touch sheet, where the wheels expose every
+   * hour/minute/second. Independent of `timeIncrement`, which governs desktop
+   * arrow-key stepping. Setting both to the same value is the usual choice for
+   * scheduling flows on desktop.
    */
   timeOptionInterval?: DateTimeInputTimeOptionInterval;
 
@@ -398,6 +409,7 @@ export interface DateTimeInputProps extends Omit<
 
   /**
    * Placeholder text shown in the time portion when no time is selected.
+   * On touch, this appears in the closed time segment before a time is chosen.
    * @default "Select a time"
    */
   timePlaceholder?: string;
@@ -432,7 +444,9 @@ export interface DateTimeInputProps extends Omit<
   labelTooltip?: string;
 
   /**
-   * Number of months to display in the calendar.
+   * Number of months to display in the desktop calendar popover. Ignored on the
+   * mobile touch sheet, whose Date panel always shows one swipe-paged month at a
+   * time.
    * @default 1
    */
   numberOfMonths?: 1 | 2;
@@ -497,7 +511,7 @@ function getDefaultTime(hasSeconds: boolean): ISOTimeString {
  * />
  * ```
  */
-export function DateTimeInput({
+function PointerDateTimeField({
   label,
   isLabelHidden = false,
   description,
@@ -533,8 +547,8 @@ export function DateTimeInput({
   ...rest
 }: DateTimeInputProps) {
   const t = useTranslator();
+  const locale = useLocale();
   const isEffectivelyRequired = useResolvedRequired({isRequired, isOptional});
-  const {locale} = use(InternationalizationContext);
   // Speaks arrow-key stepping results through the persistent live regions:
   // stepping programmatically rewrites a plain textbox's value, which screen
   // readers do not announce on their own (WCAG 4.1.2).
@@ -1687,6 +1701,26 @@ export function DateTimeInput({
       {showsDisabledMessage &&
         disabledMessageTooltip.renderTooltip(disabledMessage)}
     </Field>
+  );
+}
+
+PointerDateTimeField.displayName = 'PointerDateTimeField';
+
+const TOUCH_POINTER_QUERY = '(pointer: coarse)';
+
+/**
+ * A combined date and time picker that keeps the desktop text-entry surface on
+ * mouse/trackpad devices and uses Astryx's custom bottom-sheet picker on coarse
+ * pointers. Unlike DateInput, this never hands touch picking to the browser/OS:
+ * the mobile flow has to coordinate date and time together, preserve drafted
+ * time before a date exists, and enforce datetime min/max across both panels.
+ */
+export function DateTimeInput(props: DateTimeInputProps) {
+  const isTouch = useMediaQuery(TOUCH_POINTER_QUERY);
+  return isTouch ? (
+    <TouchDateTimeField {...props} />
+  ) : (
+    <PointerDateTimeField {...props} />
   );
 }
 
