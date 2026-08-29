@@ -185,21 +185,21 @@ describe('Toast reflects the Theme mode as a theming state (#5503)', () => {
   });
 
   it('under an explicit mode, ignores an OS preference change', () => {
+    // Explicit light while the OS turns dark: the two disagree, so an
+    // implementation that let the OS win would show here.
     const os = mockLiveMatchMedia(false);
     render(
-      <Theme theme={testTheme} mode="dark">
+      <Theme theme={testTheme} mode="light">
         <InlineToast />
       </Theme>,
     );
-    expect(card()).toHaveAttribute('data-theme-mode', 'dark');
-    act(() => {
-      os.setPrefersDark(false);
-    });
+    expect(card()).toHaveAttribute('data-theme-mode', 'light');
     act(() => {
       os.setPrefersDark(true);
     });
-    expect(card()).toHaveAttribute('data-theme-mode', 'dark');
-    expect(card()).not.toHaveClass('light');
+    expect(card()).toHaveAttribute('data-theme-mode', 'light');
+    expect(card()).toHaveClass('light');
+    expect(card()).not.toHaveClass('dark');
   });
 
   it('under mode="system", releases every OS-preference listener on unmount', () => {

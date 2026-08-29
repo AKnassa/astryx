@@ -7,6 +7,7 @@ import {Theme} from './Theme';
 import {defineTheme} from './defineTheme';
 import {resetThemes} from './themeRegistry';
 import {useTheme} from './useTheme';
+import {useMediaQuery} from '../hooks/useMediaQuery';
 import {resolveThemeTokens} from './tokens';
 
 // Mock useMediaQuery — default to light mode
@@ -132,19 +133,31 @@ describe('useTheme', () => {
     expect(result.current.mode).toBe('dark');
   });
 
-  it.each(['banana', 'DARK', ''])(
-    'resolves a mode outside light|dark|system ("%s") like system',
-    value => {
-      // A persisted preference read back untyped can hand Theme a stale
-      // string. useMediaQuery is mocked to false (light) at the top of this
-      // file, so "like system" means light here — never the string itself.
-      const {result} = renderHook(() => useTheme(), {
-        wrapper: ({children}) =>
-          wrapper({children, mode: value as 'light' | 'dark' | 'system'}),
-      });
-      expect(result.current.mode).toBe('light');
-    },
-  );
+  describe('modes outside light|dark|system', () => {
+    // A persisted preference read back untyped can hand Theme a stale
+    // string. It resolves like system, through the OS preference, never
+    // as the string itself.
+    afterEach(() => {
+      vi.mocked(useMediaQuery).mockReturnValue(false);
+    });
+
+    it.each([
+      ['banana', false, 'light'],
+      ['DARK', false, 'light'],
+      ['', false, 'light'],
+      ['banana', true, 'dark'],
+    ] as const)(
+      'resolves "%s" like system (prefersDark=%s -> %s)',
+      (value, prefersDark, expected) => {
+        vi.mocked(useMediaQuery).mockReturnValue(prefersDark);
+        const {result} = renderHook(() => useTheme(), {
+          wrapper: ({children}) =>
+            wrapper({children, mode: value as 'light' | 'dark' | 'system'}),
+        });
+        expect(result.current.mode).toBe(expected);
+      },
+    );
+  });
 
   it('provides a tokens map with all resolved values', () => {
     const {result} = renderHook(() => useTheme(), {
