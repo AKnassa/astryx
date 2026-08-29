@@ -91,8 +91,11 @@ export const docs = {
   theming: {
     targets: [
       // `themeMode` is the resolved mode of the Theme the card renders under,
-      // always written with a value ('themeMode:dark'); key external CSS on
-      // [data-theme-mode], not the bare class.
+      // always written with a value ('themeMode:dark'). Key external CSS on
+      // [data-theme-mode], not the bare class: `.dark` also matches
+      // class-strategy dark-mode rules such as Tailwind's. onDark/onLight
+      // rules for `toast` compile to descendant selectors and never paint
+      // the card root; themeMode is the root's own mode hook.
       {className: 'astryx-toast', visualProps: ['type'], states: ['themeMode']},
     ],
     vars: [

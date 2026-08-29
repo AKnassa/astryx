@@ -301,8 +301,13 @@ export function ToastSurface({
       {...mergeProps(
         // `themeMode` reflects the resolved Theme mode: the MediaTheme below
         // makes every light-dark() token follow the painted surface, so
-        // nothing else in the card can say which app mode it is in. (#5503)
-        themeProps('toast', {type, themeMode: mode}),
+        // nothing else in the card can say which app mode it is in. Both
+        // values are closed vocabularies: the card already renders anything
+        // but "error" as info, so the reflection says so too. (#5503)
+        themeProps('toast', {
+          type: isError ? 'error' : 'info',
+          themeMode: mode,
+        }),
         stylex.props(
           styles.root,
           isError ? styles.variantError : styles.variantDefault,
