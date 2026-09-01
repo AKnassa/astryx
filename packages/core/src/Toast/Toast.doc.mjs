@@ -160,7 +160,7 @@ export const docs = {
       {
         guidance: true,
         description:
-          "Theme a toast by app color mode through its themeMode state (toast: {'themeMode:dark': {...}}) rather than branching on useTheme() in product code; it holds even when the card's surface is dark in both modes.",
+          "Give a toast action the look of the controls on the page around it through the card's themeMode state (toast: {'themeMode:dark': {...}}), not by branching on useTheme() in product code. Inside the card, light-dark() and onDark/onLight follow the surface, so when that surface is dark in both modes (the error toast; a brand's ink toast) they see one side, and themeMode is the only thing that still says which page the card is on.",
       },
       {
         guidance: false,
@@ -249,7 +249,7 @@ export const docsZh = {
       {
         guidance: true,
         description:
-          "通过 themeMode 状态（toast: {'themeMode:dark': {...}}）按应用配色模式为 toast 设置主题，而不是在产品代码中依据 useTheme() 分支；即使卡片表面在两种模式下都是深色，该规则依然成立。",
+          "通过卡片的 themeMode 状态（toast: {'themeMode:dark': {...}}）让 toast 操作与页面上的控件保持同一外观，而不是在产品代码中依据 useTheme() 分支。卡片内部的 light-dark() 与 onDark/onLight 跟随表面：当表面在两种模式下都是深色（error toast、品牌的墨色 toast）时它们只看到一侧，只有 themeMode 仍能说明卡片所在的页面模式。",
       },
       {
         guidance: false,
@@ -317,7 +317,7 @@ export const docsDense = {
       {
         guidance: true,
         description:
-          "Theme by app color mode via themeMode state (toast: {'themeMode:dark': {...}}) rather than useTheme() branching in product code; holds even when the card surface is dark in both modes.",
+          "Style toast actions for the page around them via themeMode state (toast: {'themeMode:dark': {...}}), not useTheme() branching in product code; light-dark()/onDark inside the card follow the surface, so a surface dark in both modes (error toast, brand ink toast) sees one side and only themeMode still says which page the card is on.",
       },
       {
         guidance: false,

@@ -480,25 +480,34 @@ describe('the reflected state is a defineTheme target (#5503)', () => {
     expect(card('Failed')).toHaveClass('astryx-toast', 'error', 'light');
   });
 
-  it('carries a theme-owned custom property through the mode rule for a Button rule to read', () => {
-    // The documented way to reach an action in endContent: the toast rule
-    // sets a property the theme owns, and the theme's Button rule reads it
-    // behind the variant's own background. Both halves must survive the
-    // generator unchanged.
+  it('carries theme-owned custom properties through the mode rules for a Button rule to read', () => {
+    // The documented way to reach an action in endContent (the
+    // ThemedToastAction story): the toast rules set properties the theme
+    // owns, and the theme's Button rule reads them ahead of its own
+    // light-dark() fallback. Every half must survive the generator unchanged,
+    // the commas inside a var() fallback and a var() in the middle of a
+    // shorthand included. (light-dark() takes colours only, so the ring's
+    // shape stays constant and the property carries its colour.)
     const theme = defineTheme({
       name: 'toast-theme-mode-recipe',
       tokens: {},
       components: {
         toast: {
           'themeMode:light': {
-            '--demo-toast-action-bg': 'rgb(255 255 255 / 0.16)',
+            '--ink-secondary-bg': 'rgb(255 255 255 / 0.16)',
+            '--ink-secondary-ring': 'transparent',
           },
-          'themeMode:dark': {'--demo-toast-action-bg': 'transparent'},
+          'themeMode:dark': {
+            '--ink-secondary-bg': 'transparent',
+            '--ink-secondary-ring': 'rgb(255 255 255 / 0.24)',
+          },
         },
         button: {
           'variant:secondary': {
             backgroundColor:
-              'var(--demo-toast-action-bg, var(--color-neutral))',
+              'var(--ink-secondary-bg, light-dark(rgb(27 29 34 / 0.08), transparent))',
+            boxShadow:
+              'inset 0 0 0 1px var(--ink-secondary-ring, light-dark(transparent, rgb(255 255 255 / 0.24)))',
           },
         },
       },
@@ -506,13 +515,13 @@ describe('the reflected state is a defineTheme target (#5503)', () => {
 
     const {component} = generateThemeCSS(theme);
     expect(component).toContain(
-      '.astryx-toast.light {\n    --demo-toast-action-bg: rgb(255 255 255 / 0.16);',
+      '.astryx-toast.light {\n    --ink-secondary-bg: rgb(255 255 255 / 0.16);\n    --ink-secondary-ring: transparent;',
     );
     expect(component).toContain(
-      '.astryx-toast.dark {\n    --demo-toast-action-bg: transparent;',
+      '.astryx-toast.dark {\n    --ink-secondary-bg: transparent;\n    --ink-secondary-ring: rgb(255 255 255 / 0.24);',
     );
     expect(component).toContain(
-      '.astryx-button.secondary {\n    background-color: var(--demo-toast-action-bg, var(--color-neutral));',
+      '.astryx-button.secondary {\n    background-color: var(--ink-secondary-bg, light-dark(rgb(27 29 34 / 0.08), transparent));\n    box-shadow: inset 0 0 0 1px var(--ink-secondary-ring, light-dark(transparent, rgb(255 255 255 / 0.24)));',
     );
   });
 });
