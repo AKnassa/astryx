@@ -17,7 +17,7 @@
  * - /packages/cli/assets/templates/blocks/components/SideNav/ (showcase blocks)
  */
 
-import React, {useCallback, type ReactNode} from 'react';
+import React, {useCallback, useRef, type ReactNode} from 'react';
 import * as stylex from '@stylexjs/stylex';
 import {durationVars, easeVars} from '../theme/tokens.stylex';
 import {Icon} from '../Icon';
@@ -28,6 +28,7 @@ import {useMergedRefs} from '../hooks/useMergedRefs';
 import {
   registerExternalCollapseToggle,
   useSideNavCollapse,
+  type SideNavCollapseAssociation,
   type SideNavCollapseState,
   type SideNavControlledCollapsible,
   type SideNavImperativeCollapseHandle,
@@ -149,13 +150,22 @@ export function SideNavCollapseButton({
 
   // Rendered outside a SideNav, this button is where focus is parked when a
   // fully-hidden collapse (`collapsedWidth: 0`) starts with focus still inside
-  // the nav; see SideNav. The in-nav button reads context instead and goes
-  // inert with the rest of the nav, so it never registers.
+  // the nav; see SideNav. The nav finds it by the collapse state they share:
+  // the controlled callback, or the deprecated handle ref. That association
+  // is kept current on every render instead of being re-registered when the
+  // callback's identity changes: a re-registration detaches in React's
+  // mutation phase and re-attaches in its layout phase, so a button placed
+  // after its nav in the tree would be missing at the moment the nav's
+  // layout effect looks for it. The in-nav button reads context instead and
+  // goes inert with the rest of the nav, so it never registers.
   const isOutsideNav = collapsible != null || handleRef != null;
+  const associationRef = useRef<SideNavCollapseAssociation>({});
+  associationRef.current.onCollapsedChange = collapsible?.onCollapsedChange;
+  associationRef.current.handleRef = handleRef;
   const registerRef = useCallback(
     (element: HTMLButtonElement | null) =>
       element != null && isOutsideNav
-        ? registerExternalCollapseToggle(element)
+        ? registerExternalCollapseToggle(element, associationRef.current)
         : undefined,
     [isOutsideNav],
   );
