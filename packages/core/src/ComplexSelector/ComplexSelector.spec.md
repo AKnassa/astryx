@@ -32,8 +32,9 @@ system_specs: [spec:AST-079/DEC-1]
 
 ComplexSelector renders a field-owned shell, an owned trigger, and a dialog
 popup for caller-provided rich selection content. This draft records current
-consumer anatomy and theming ownership without changing runtime behavior,
-styling, targets, or public API.
+consumer anatomy and theming ownership, plus two additive props, `renderTrigger` and the
+`disabledMessage` prop adopted from the input-field family, without changing
+existing runtime behavior, styling, or targets when they are unset.
 
 ## Compatibility and migration
 
@@ -42,6 +43,12 @@ styling, targets, or public API.
   runtime, DOM, styling, targets, and public API remain unchanged. With
   `renderTrigger`, the caller-rendered control replaces the Field shell, Trigger, and
   Indicator icon by the caller's choice.
+- `disabledMessage` is additive and unset by default, which keeps the natively
+  disabled trigger exactly as shipped. Before it, `isDisabled` always rendered a
+  natively disabled trigger. After it, `isDisabled` with a reason keeps the
+  trigger focusable via `aria-disabled` and exposes the reason as a tooltip
+  linked through `aria-describedby`; opening stays blocked either way
+  (`family:input-fields` FR4).
 - Controlled/uncontrolled behavior: unchanged
 - Migration decision: none
 
@@ -70,13 +77,19 @@ Consumer migration instructions belong in consumer docs and release notes.
 
 ## Public concepts
 
-One additive concept: anchored mode, selected by the `renderTrigger` render prop
+Two additive concepts. The first is anchored mode, selected by the `renderTrigger` render prop
 (absent by default). The prop's name, shape, and open-state documentation are
 governed by [`spec:AST-055`](../../../../docs/specs/AST-055-caller-rendered-trigger/spec.md);
 this record covers only what is local to `ComplexSelector`. The caller renders the control the popup hangs off and
 spreads the given props (`ref`, `id`, `onClick`, `onKeyDown`, `aria-haspopup`,
 `aria-expanded`, `aria-controls`, `aria-busy`) onto it. Consumer props and usage
 remain documented in `ComplexSelector.doc.mjs`.
+
+The second is `disabledMessage`, which adopts the input-field family's disabled-reason contract
+(`family:input-fields` FR4): with `isDisabled`, the trigger stays focusable via
+`aria-disabled` and exposes the reason as a tooltip while activation stays
+blocked. With `renderTrigger`, the caller owns the control, so
+`disabledMessage` renders nothing.
 
 ## Behavioral and layout contract
 
@@ -121,6 +134,11 @@ is unchanged. With `renderTrigger`, the caller's control carries the disclosure 
 (`aria-haspopup="dialog"`, `aria-expanded`, `aria-controls`), the Popup keeps
 its dialog label from `label`, focus returns to that control on close, and
 ArrowDown on it opens the popup as it does on the built-in trigger.
+
+A trigger with `isDisabled` and `disabledMessage` stays focusable via
+`aria-disabled`, links the reason tooltip through `aria-describedby` after the
+description and status message, and still blocks pointer, keyboard, and
+imperative opening.
 
 ## Design relationships
 
@@ -172,20 +190,24 @@ content remains outside the owned anatomy inventory.
 
 ## Verification map
 
-| Contract            | Verification                                                               | Representative states                                    | Mutation or failure expectation                                                                                   | Audit section                         |
-| ------------------- | -------------------------------------------------------------------------- | -------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- | ------------------------------------- |
-| FR1                 | `ComplexSelector.test.tsx` render, ghost-trigger, and popup suites         | Default closed, ghost start branches, open Popup         | Removing a documented part fails existing role, content, or structure assertions.                                 | `audit:ComplexSelector/anatomy`       |
-| FR2                 | Component target suites, source inspection, and theming target inventories | Closed/open Popup; expanded Indicator icon               | Removing or renaming a current local target fails component assertions or target inventories.                     | `audit:ComplexSelector/theming`       |
-| FR3, FR4            | Icon owner tests and `renderIconSlot` source inspection                    | Semantic/component icon; arbitrary ReactNode             | A branch gains the wrong owner, loses its target, or receives an invented local target.                           | `audit:ComplexSelector/theming`       |
-| FR5                 | `ComplexSelector.test.tsx` "trigger render prop" suite                     | Caller control closed/open; ArrowDown open; focus return | Field chrome renders with a trigger, the control lacks disclosure state, or focus does not return to it on close. | `audit:ComplexSelector/accessibility` |
-| Theming anatomy map | `scripts/check-knowledge.mjs`                                              | Canonical anatomy and current local targets              | Missing, extra, prefixed, stale, or multiply assigned mappings fail repository validation.                        | `audit:ComplexSelector/theming`       |
+| Contract            | Verification                                                               | Representative states                                                      | Mutation or failure expectation                                                                                              | Audit section                         |
+| ------------------- | -------------------------------------------------------------------------- | -------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- | ------------------------------------- |
+| FR1                 | `ComplexSelector.test.tsx` render, ghost-trigger, and popup suites         | Default closed, ghost start branches, open Popup                           | Removing a documented part fails existing role, content, or structure assertions.                                            | `audit:ComplexSelector/anatomy`       |
+| FR2                 | Component target suites, source inspection, and theming target inventories | Closed/open Popup; expanded Indicator icon                                 | Removing or renaming a current local target fails component assertions or target inventories.                                | `audit:ComplexSelector/theming`       |
+| FR3, FR4            | Icon owner tests and `renderIconSlot` source inspection                    | Semantic/component icon; arbitrary ReactNode                               | A branch gains the wrong owner, loses its target, or receives an invented local target.                                      | `audit:ComplexSelector/theming`       |
+| FR5                 | `ComplexSelector.test.tsx` "trigger render prop" suite                     | Caller control closed/open; ArrowDown open; focus return                   | Field chrome renders with a trigger, the control lacks disclosure state, or focus does not return to it on close.            | `audit:ComplexSelector/accessibility` |
+| Disabled reason     | `ComplexSelector.test.tsx` `ComplexSelector disabledMessage` suite         | Natively disabled; focusable-disabled with a reason; re-enabled at runtime | A reason leaves the trigger natively disabled, drops out of `aria-describedby`, or the popup opens while focusable-disabled. | `audit:ComplexSelector/accessibility` |
+| Theming anatomy map | `scripts/check-knowledge.mjs`                                              | Canonical anatomy and current local targets                                | Missing, extra, prefixed, stale, or multiply assigned mappings fail repository validation.                                   | `audit:ComplexSelector/theming`       |
 
 Current component tests directly assert the Trigger and Popup targets. Source
 inspection confirms that non-lazy `useLayer` keeps the Popup mounted while
 closed. The Indicator icon target is covered by source inspection and shared
 target inventories rather than a dedicated component assertion. `renderIconSlot`
 and Icon owner tests distinguish the Icon-rendered branch from arbitrary
-caller-owned ReactNode content.
+caller-owned ReactNode content. The `ComplexSelector disabledMessage` suite
+asserts the focusable-disabled trigger, the reason tooltip on hover and focus,
+its `aria-describedby` link, and blocked opening by pointer, keyboard, and the
+imperative handle.
 
 ## Decision log
 
