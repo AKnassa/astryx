@@ -21,6 +21,14 @@ const SCRIPT = path.join(
   'visual-gate',
   'visual-acceptance.mjs',
 );
+const GATE = path.join(ROOT, '.github', 'scripts', 'visual-gate', 'gate.mjs');
+const PUBLISHER = path.join(
+  ROOT,
+  '.github',
+  'scripts',
+  'lib',
+  'gh-pages-publisher.mjs',
+);
 const WORKFLOW = path.join(
   ROOT,
   '.github',
@@ -81,20 +89,33 @@ function runAcceptance(command, flags) {
   return execFileSync(process.execPath, args, {encoding: 'utf8'});
 }
 
-function workflowStepScript(name) {
+function workflowStep(name) {
   const workflow = fs.readFileSync(WORKFLOW, 'utf8');
   const start = workflow.indexOf(`      - name: ${name}\n`);
   expect(start).toBeGreaterThan(-1);
   const next = workflow.indexOf('\n      - name:', start + 1);
-  const step = workflow.slice(start, next === -1 ? undefined : next);
-  const runMarker = '        run: |\n';
-  const runStart = step.indexOf(runMarker);
-  expect(runStart).toBeGreaterThan(-1);
-  return step
-    .slice(runStart + runMarker.length)
-    .split('\n')
-    .map(line => (line.startsWith('          ') ? line.slice(10) : line))
-    .join('\n');
+  return workflow.slice(start, next === -1 ? undefined : next);
+}
+
+function workflowStepScript(name) {
+  const step = workflowStep(name);
+  for (const [marker, fold] of [
+    ['        run: |\n', false],
+    ['        run: >\n', true],
+  ]) {
+    const runStart = step.indexOf(marker);
+    if (runStart === -1) continue;
+    const lines = step
+      .slice(runStart + marker.length)
+      .split('\n')
+      .map(line => (line.startsWith('          ') ? line.slice(10) : line));
+    if (!fold) return lines.join('\n');
+    return `${lines
+      .map(line => line.trim())
+      .filter(Boolean)
+      .join(' ')}\n`;
+  }
+  throw new Error(`Step ${name} has no runnable script`);
 }
 
 function writeCommandShims(root) {
@@ -228,11 +249,14 @@ function makeFixture(mutate) {
     RECORD_REL,
   );
   const sandbox = path.join(root, 'sandbox');
-  fs.mkdirSync(path.join(sandbox, '.github', 'scripts'), {recursive: true});
-  fs.symlinkSync(
-    path.join(ROOT, '.github', 'scripts', 'visual-gate'),
-    path.join(sandbox, '.github', 'scripts', 'visual-gate'),
-  );
+  const sandboxScripts = path.join(sandbox, '.github', 'scripts');
+  fs.mkdirSync(sandboxScripts, {recursive: true});
+  for (const entry of ['visual-gate', 'lib', 'gh-pages-publisher.mjs']) {
+    fs.symlinkSync(
+      path.join(ROOT, '.github', 'scripts', entry),
+      path.join(sandboxScripts, entry),
+    );
+  }
   const plan = path.join(sandbox, 'accepted-plan.json');
   runAcceptance('plan', {acceptance, output: plan});
 
@@ -249,7 +273,38 @@ function makeFixture(mutate) {
     shots: {[KEY]: {...SHOT, sha256: digest(after), width: 2, height: 2}},
   });
 
-  mutate?.({acceptance, baselineShot, pages});
+  mutate?.({acceptance, baselineShot, capture, pages});
+  writeJSON(
+    path.join(pages, '.astryx-gh-pages', 'publication-queue', '900.json'),
+    {
+      version: 1,
+      repository: 'facebook/astryx',
+      runId: 900,
+      scope: 'visual-gate/baseline',
+    },
+  );
+  writeJSON(
+    path.join(pages, '.astryx-gh-pages', 'publication-queue', 'holder.json'),
+    {
+      version: 1,
+      repository: 'facebook/astryx',
+      runId: 900,
+      scope: 'visual-gate/baseline',
+    },
+  );
+  writeJSON(path.join(pages, 'visual-gate', 'publication-queue', '900.json'), {
+    version: 1,
+    repository: 'facebook/astryx',
+    runId: 900,
+  });
+  writeJSON(
+    path.join(pages, 'visual-gate', 'publication-queue', 'holder.json'),
+    {
+      version: 1,
+      repository: 'facebook/astryx',
+      runId: 900,
+    },
+  );
   git(pages, 'add', '.');
   git(pages, 'commit', '-qm', 'record acceptance');
 
@@ -265,6 +320,8 @@ function runPromotion({
   race = false,
 }) {
   const marker = path.join(fixture.root, 'race-injected');
+  const runnerTemp = path.join(fixture.root, 'runner');
+  fs.mkdirSync(runnerTemp, {recursive: true});
   const result = spawnSync(
     '/bin/bash',
     ['-c', workflowStepScript('Verify and promote the baseline')],
@@ -276,11 +333,12 @@ function runPromotion({
         PATH: `${fixture.bin}:${process.env.PATH}`,
         GH_TOKEN: 'test-token',
         GITHUB_REPOSITORY: 'facebook/astryx',
+        GITHUB_RUN_ID: '900',
         PR_NUMBER: '42',
         HEAD_SHA: HEAD,
         MERGE_SHA: MERGE,
         RECORD_REL,
-        RUNNER_TEMP: path.join(fixture.root, 'runner'),
+        RUNNER_TEMP: runnerTemp,
         GITHUB_OUTPUT: path.join(fixture.root, 'github-output'),
         GH_RUNS_JSON: JSON.stringify({
           workflow_runs: [{name: 'CI', ...latest}],
@@ -299,6 +357,98 @@ function runPromotion({
 }
 
 describe('visual acceptance promotion workflow', () => {
+  it('captures the resolved historical merge when workflow main differs', () => {
+    const currentMain = 'f'.repeat(40);
+    const root = fs.mkdtempSync(
+      path.join(os.tmpdir(), 'visual-promotion-capture-identity-'),
+    );
+    roots.push(root);
+    const plan = path.join(root, 'plan.json');
+    const output = path.join(root, 'output');
+    writeJSON(plan, [{...SHOT, key: KEY}]);
+
+    const step = workflowStep('Recapture exactly the accepted shots');
+    const gate = fs.readFileSync(GATE, 'utf8');
+    expect(step).toContain(
+      'ASTRYX_VISUAL_SHA: ${{ needs.resolve.outputs.merge_sha }}',
+    );
+    expect(step).not.toContain('GITHUB_SHA:');
+    const manifestContext = gate.slice(
+      gate.indexOf('manifest.context = {'),
+      gate.indexOf('fs.writeFileSync(', gate.indexOf('manifest.context = {')),
+    );
+    expect(manifestContext).toContain('...captureIdentity(),');
+
+    execFileSync(
+      process.execPath,
+      [GATE, 'check', '--plan-file', plan, '--max-shots', '0', '--out', output],
+      {
+        encoding: 'utf8',
+        env: {
+          ...process.env,
+          GITHUB_SHA: currentMain,
+          ASTRYX_VISUAL_SHA: MERGE,
+        },
+      },
+    );
+    expect(
+      JSON.parse(fs.readFileSync(path.join(output, 'verdict.json'), 'utf8'))
+        .context.sha,
+    ).toBe(MERGE);
+  });
+
+  it('shares the merge-bound recapture between recovery and normal close', () => {
+    const workflow = fs.readFileSync(WORKFLOW, 'utf8');
+    const capture = workflowStep('Recapture exactly the accepted shots');
+    const checkout = workflowStep('Checkout the resolved merged result');
+
+    expect(workflow).toContain('workflow_dispatch:');
+    expect(workflow).toContain('types: [closed]');
+    expect(
+      workflow.match(/- name: Recapture exactly the accepted shots/g),
+    ).toHaveLength(1);
+    expect(capture).toContain(
+      'ASTRYX_VISUAL_SHA: ${{ needs.resolve.outputs.merge_sha }}',
+    );
+    expect(capture).toContain(
+      '--storybook-dir .visual-merged-source/apps/storybook/dist',
+    );
+    expect(capture).toContain(
+      'node .github/scripts/visual-gate/gate.mjs capture',
+    );
+    expect(checkout).toContain('ref: ${{ needs.resolve.outputs.merge_sha }}');
+    expect(checkout).toContain('allow-unsafe-pr-checkout: true');
+  });
+
+  it('executes the migrated publisher from the workflow sandbox root', () => {
+    const fixture = makeFixture();
+    const script = workflowStepScript('Verify and promote the baseline');
+    expect(script).toContain('gh-pages-publisher.mjs visual-baseline-accepted');
+    expect(
+      fs.existsSync(
+        path.join(
+          fixture.sandbox,
+          '.github',
+          'scripts',
+          'gh-pages-publisher.mjs',
+        ),
+      ),
+    ).toBe(true);
+    expect(
+      fs.existsSync(
+        path.join(
+          fixture.sandbox,
+          '.github',
+          'scripts',
+          'lib',
+          'gh-pages-publisher.mjs',
+        ),
+      ),
+    ).toBe(true);
+    const result = runPromotion({fixture});
+    expect(result.status, `${result.stdout}\n${result.stderr}`).toBe(0);
+  });
+
   it('retries from the immutable record after cleanup wins the first push race', () => {
     const fixture = makeFixture();
     const result = runPromotion({fixture, race: true});
@@ -410,6 +560,16 @@ describe('visual acceptance promotion workflow', () => {
       error: /record identity does not match this merged head/,
     },
     {
+      name: 'the wrong merged capture identity',
+      mutate: ({capture}) => {
+        const manifestFile = path.join(capture, 'manifest.json');
+        const manifest = JSON.parse(fs.readFileSync(manifestFile, 'utf8'));
+        manifest.context.sha = 'e'.repeat(40);
+        writeJSON(manifestFile, manifest);
+      },
+      error: /capture was produced for/,
+    },
+    {
       name: 'tampered archived pixels',
       mutate: ({acceptance}) =>
         fs.writeFileSync(
@@ -433,10 +593,19 @@ describe('visual acceptance promotion workflow', () => {
 
   it('does not consult ephemeral PR evidence during promotion', () => {
     const script = workflowStepScript('Verify and promote the baseline');
-    expect(script).toContain('promotion-identity.mjs resolve-acceptance');
+    const publisher = fs.readFileSync(PUBLISHER, 'utf8');
+    const promotion = publisher.slice(
+      publisher.indexOf('export async function publishAcceptedVisualBaseline'),
+      publisher.indexOf('export async function publishManualVisualBaseline'),
+    );
+
+    expect(script).toContain('gh-pages-publisher.mjs visual-baseline-accepted');
     expect(script).toContain('--expected-record-rel "$RECORD_REL"');
-    expect(script).toContain('visual-acceptance.mjs promote');
-    expect(script).not.toContain('visual-acceptance.mjs state');
-    expect(script).not.toContain('/pr/');
+    expect(promotion).toContain('promotion-identity.mjs');
+    expect(promotion).toContain('resolve-acceptance');
+    expect(promotion).toContain('visual-acceptance.mjs');
+    expect(promotion).toContain('promote');
+    expect(promotion).not.toContain('visual-acceptance.mjs state');
+    expect(promotion).not.toContain("'pr'");
   });
 });
