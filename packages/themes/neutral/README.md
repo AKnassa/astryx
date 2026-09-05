@@ -91,7 +91,7 @@ Add this to your HTML `<head>`:
   href="https://fonts.googleapis.com/css2?family=Figtree:wght@400;500;600;700&display=swap" />
 ```
 
-Without this, the theme falls back to system fonts.
+Without this, the theme falls back to system fonts. If you'd rather avoid external font requests entirely (offline apps, no-third-party-request policies), that fallback is a supported choice — the system stack is designed to hold up on its own.
 
 ## Related Packages
 
