@@ -9,7 +9,7 @@ superseded_by: null
 approved_by: null
 approved_at: null
 owners: [cixzhang]
-review_triggers: [theming]
+review_triggers: [public-api, behavior, theming, accessibility]
 verified_by:
   [
     packages/core/src/Typeahead/Typeahead.test.tsx,
@@ -36,25 +36,24 @@ Typeahead renders a single-selection search control with an optional standalone
 Field shell and delegates its combobox engine and popup results to BaseTypeahead. This draft records current
 consumer anatomy, target reachability, the shipped difference between the
 stable result row and its default TypeaheadItem content, and the additive
-`isLoading` and `changeAction` props adopted from the input-field family,
-without changing existing runtime behavior, styling, or targets.
+`isLoading` and `changeAction` props adopted from `family:input-fields`,
+without changing existing styling or targets.
 
 ## Compatibility and migration
 
 - Released default preserved: `yes` — `isLoading` defaults to `false` and
-  `changeAction` to unset, which renders and behaves exactly as shipped
+  `changeAction` to unset, which renders exactly as shipped
 - Compatibility class: additive; two new public props, `isLoading` and
   `changeAction`, with no change to existing targets, DOM, or styling, and
-  no change to behavior without them except the FR4 fix: a field disabled
-  with a reason no longer selects an item from the keyboard
-- `isLoading` is additive. It marks the value busy — one Spinner in the end
-  lane plus `aria-busy` on the combobox — and never means the option source is
-  pending (`spec:AST-001`). `changeAction` is additive. Before it, a selection
-  or clear only reported through `onChange`. After it, `onChange` still runs
-  first, then the Action runs inside a transition while the proposed value
-  shows as busy until the controlled `value` accepts it (`family:input-fields`
-  FR5–FR7). The clear button follows the accepted `value`, as Selector's
-  does, while the token follows the proposal.
+  no change to behavior without them except the `family:input-fields` FR4
+  fix: a field disabled with a reason no longer opens entries or selects an
+  item from the keyboard
+- Before: Typeahead had no input-busy state, and a selection or clear
+  reported only through `onChange`. After: `isLoading` marks the value busy,
+  and selection and clear also run `changeAction` in the family's FR6 order,
+  both with their `family:input-fields` meaning (FR5–FR7, DEC-2, DEC-3). The
+  clear button follows the accepted `value`, as Selector's does, while the
+  token follows the proposed item.
 - Controlled/uncontrolled behavior: unchanged
 - Migration decision: none
 
@@ -82,6 +81,9 @@ Consumer migration instructions belong in consumer docs and release notes.
   Field's current `input-clear-button` target.
 - Loading-indicator presentation — owned by `component:Spinner`. Typeahead
   decides only where the indicator sits.
+- Family-wide input state display, behavior, appearance, size, end-control,
+  status-placement, and disabled-reason policy — owned by current
+  `family:input-fields`.
 - General Icon presentation for an Icon-rendered start icon.
 - Arbitrary ReactNode start or item content supplied by the caller.
 - A target/state for the outer Result row, Result group heading, or selected-row
@@ -90,11 +92,11 @@ Consumer migration instructions belong in consumer docs and release notes.
 
 ## Public concepts
 
-`isLoading` and `changeAction` are input-field family concepts adopted from
-`family:input-fields` (FR5–FR7, DEC-2, DEC-3), not Typeahead-owned concepts.
-Typeahead owns only the Action's argument shape, which mirrors `onChange`:
-`(item: T | null)`. Search busy stays BaseTypeahead-owned; both meanings share
-the one end-lane Spinner and the combobox `aria-busy`.
+`isLoading` and `changeAction` carry their `family:input-fields` meaning
+(FR5–FR7, DEC-2, DEC-3). Typeahead adds three mappings: `changeAction`
+receives `onChange`'s `(item: T | null)` (AV4); selection and the clear
+button both run in the family's FR6 order; and input busy and BaseTypeahead's
+source busy share one end-lane Spinner and one combobox `aria-busy`.
 
 No other public concept is introduced. Consumer props and usage remain
 documented in `Typeahead.doc.mjs`; BaseTypeahead and TypeaheadItem retain their
@@ -127,15 +129,15 @@ existing public component documentation.
 
 ### Representative states
 
-| State                         | Required invariant                                                                                 | Allowed variation                                                       |
-| ----------------------------- | -------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------- |
-| Standalone or InputGroup      | Field is present only standalone; Input surface anatomy and targets remain the same in both paths. | InputGroup owns grouped layout and labeling support.                    |
-| Empty or editing              | Editable input remains inside the `typeahead` Input surface.                                       | Query, loading state, and popup visibility may vary.                    |
-| Selected and not editing      | Token owns the selected-value presentation while the input is collapsed.                           | Clear button may be present according to `hasClear` and disabled state. |
-| Results with default renderer | Outer Result row remains untargeted; inner TypeaheadItem carries `typeahead-item`.                 | Item label, icon/avatar, and description may vary.                      |
-| Results with custom renderer  | Outer Result row remains untargeted; custom content receives no `typeahead-item`.                  | Caller owns the inner result content.                                   |
-| Grouped and selected results  | Group heading and selected-row concept remain untargeted by Typeahead.                             | A generic Icon paints the selected check.                               |
-| Empty completed search        | Empty state carries `typeahead-empty-state` inside the Dropdown.                                   | Consumer-supplied empty text may vary.                                  |
+| State                         | Required invariant                                                                                 | Allowed variation                                                                              |
+| ----------------------------- | -------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
+| Standalone or InputGroup      | Field is present only standalone; Input surface anatomy and targets remain the same in both paths. | InputGroup owns grouped layout and labeling support.                                           |
+| Empty or editing              | Editable input remains inside the `typeahead` Input surface.                                       | Query, loading state, and popup visibility may vary.                                           |
+| Selected and not editing      | Token owns the selected-value presentation while the input is collapsed.                           | Clear button may be present according to `hasClear`, disabled state, and the accepted `value`. |
+| Results with default renderer | Outer Result row remains untargeted; inner TypeaheadItem carries `typeahead-item`.                 | Item label, icon/avatar, and description may vary.                                             |
+| Results with custom renderer  | Outer Result row remains untargeted; custom content receives no `typeahead-item`.                  | Caller owns the inner result content.                                                          |
+| Grouped and selected results  | Group heading and selected-row concept remain untargeted by Typeahead.                             | A generic Icon paints the selected check.                                                      |
+| Empty completed search        | Empty state carries `typeahead-empty-state` inside the Dropdown.                                   | Consumer-supplied empty text may vary.                                                         |
 
 ### Transformation and precedence order
 
@@ -148,8 +150,13 @@ existing public component documentation.
 
 ## Accessibility contract
 
-This draft does not change or extend Typeahead's existing field, combobox,
-listbox, option, live-region, focus, or dismissal behavior.
+This draft changes two combobox facts: `aria-busy` also reflects input busy
+(see Public concepts), and while the field is disabled with a reason the
+combobox's own key handling stops, so ArrowDown no longer opens the entries
+shown on focus and Enter no longer selects one (`family:input-fields` FR4).
+It adds no Typeahead-local accessibility requirement and does not otherwise
+change existing field, combobox, listbox, option, live-region, focus, or
+dismissal behavior.
 
 ## Design relationships
 
@@ -236,6 +243,11 @@ normalize targets.
   target mapping, delegation, and factual `none` dispositions.
 - `architecture:layer-runtime` owns the current Popover host, positioning, native
   light-dismiss, and visibility reconciliation used by the Dropdown.
+- `family:input-fields` owns family-wide state display, behavior, appearance,
+  size, end-control, disabled-reason, and status-placement policy, including
+  input busy (FR5, DEC-2) and the Transition Action (FR6, DEC-3). Typeahead
+  adopts `isLoading` and `changeAction` under those rules and keeps its search
+  lifecycle BaseTypeahead-owned per FR7.
 - `family:overlay-dismissal` owns shared Escape and platform-close ordering;
   Typeahead participates through its composed Popover owner.
 - Field, Token, and Icon retain ownership of their delegated targets and
@@ -243,27 +255,27 @@ normalize targets.
 
 ## Verification map
 
-| Contract            | Verification                                                                          | Representative states                                                                | Mutation or failure expectation                                                                                                                                | Audit section                   |
-| ------------------- | ------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------- |
-| FR1, FR6            | `Typeahead.test.tsx`, owner tests, and Typeahead composition source                   | Standalone/InputGroup, empty, editing, selected, clear, start icon                   | A documented composed part disappears, gains the wrong owner, or misreports Field presence.                                                                    | `audit:Typeahead/anatomy`       |
-| FR2                 | Source inspection, target inventories, empty-state test, and `TypeaheadItem.test.tsx` | Input, open Dropdown, empty search, default item                                     | A current target is missed, invented, or documented on an element that does not carry it.                                                                      | `audit:Typeahead/theming`       |
-| FR3, FR4, FR5       | BaseTypeahead source and result/group/selection tests                                 | Default/custom result, grouped result, selected row                                  | The record hides the outer/inner asymmetry or claims reachability that current code lacks.                                                                     | `audit:Typeahead/theming`       |
-| Theming anatomy map | `scripts/check-knowledge.mjs`                                                         | Canonical anatomy and current target inventory                                       | Missing, extra, prefixed, stale, or multiply assigned mappings fail repository validation.                                                                     | `audit:Typeahead/theming`       |
-| Input busy          | `Typeahead.test.tsx` `input busy: isLoading and changeAction` suite                   | `isLoading`; pending selection or clear Action; settled; source-busy plus value-busy | A second Spinner appears, `aria-busy` drops while busy, the Action runs before `onChange`, or the proposed value survives an Action the parent did not accept. | `audit:Typeahead/accessibility` |
+| Contract            | Verification                                                                          | Representative states                                                                                    | Mutation or failure expectation                                                                                                                                                                                       | Audit section                   |
+| ------------------- | ------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------- |
+| FR1, FR6            | `Typeahead.test.tsx`, owner tests, and Typeahead composition source                   | Standalone/InputGroup, empty, editing, selected, clear, start icon                                       | A documented composed part disappears, gains the wrong owner, or misreports Field presence.                                                                                                                           | `audit:Typeahead/anatomy`       |
+| FR2                 | Source inspection, target inventories, empty-state test, and `TypeaheadItem.test.tsx` | Input, open Dropdown, empty search, default item                                                         | A current target is missed, invented, or documented on an element that does not carry it.                                                                                                                             | `audit:Typeahead/theming`       |
+| FR3, FR4, FR5       | BaseTypeahead source and result/group/selection tests                                 | Default/custom result, grouped result, selected row                                                      | The record hides the outer/inner asymmetry or claims reachability that current code lacks.                                                                                                                            | `audit:Typeahead/theming`       |
+| Theming anatomy map | `scripts/check-knowledge.mjs`                                                         | Canonical anatomy and current target inventory                                                           | Missing, extra, prefixed, stale, or multiply assigned mappings fail repository validation.                                                                                                                            | `audit:Typeahead/theming`       |
+| Input busy          | `Typeahead.test.tsx` `input busy: isLoading and changeAction` suite                   | `isLoading`; pending selection or clear Action; settled; source busy plus input busy; focusable-disabled | A second Spinner appears, `aria-busy` drops while either meaning is busy, selection or clear bypasses `family:input-fields` FR6, or a focusable-disabled field selects from the keyboard (`family:input-fields` FR4). | `audit:Typeahead/accessibility` |
 
 Existing tests directly assert Empty state and TypeaheadItem target presence,
 selected-value Token behavior, result semantics, selection state, and standalone
 Field content. Source inspection confirms InputGroup's Field omission and, with
 public target inventories, provides the current Input surface and Dropdown target
 evidence. No test is represented here as proof of a target it does not directly
-assert. The `input busy: isLoading and changeAction` suite asserts the one
-Spinner and `aria-busy` for both busy meanings, the `onChange` → `changeAction`
-order, and the optimistic value settling to the controlled `value`.
+assert. The `input busy: isLoading and changeAction` suite directly asserts
+the three mappings in Public concepts and the `family:input-fields` FR4
+keyboard block.
 
 ## Decision log
 
-None. `isLoading` and `changeAction` follow `family:input-fields` FR5–FR7
-rather than a component-local decision; this draft otherwise records current
+None. `isLoading` and `changeAction` are decided by `family:input-fields/DEC-2`
+and `family:input-fields/DEC-3`, not here; this draft otherwise records current
 facts and introduces no component-local design, theming, or layer-system
 decision.
 
@@ -277,4 +289,5 @@ decision.
 ## Content boundary
 
 This file does not duplicate consumer prop tables, examples, search algorithms,
-implementation steps, or shared layer and theming rules. It links to their owners.
+implementation steps, or shared family, layer, and theming rules. It links to
+their owners.
