@@ -34,6 +34,10 @@ export const TEMPLATE_COMPONENTS: Record<
     () =>
       import('../../../../packages/cli/assets/templates/pages/centered-hero/page'),
   ),
+  'checkout-wizard': lazy(
+    () =>
+      import('../../../../packages/cli/assets/templates/pages/checkout-wizard/page'),
+  ),
   'classic-gallery': lazy(
     () =>
       import('../../../../packages/cli/assets/templates/pages/classic-gallery/page'),
@@ -46,9 +50,9 @@ export const TEMPLATE_COMPONENTS: Record<
     () =>
       import('../../../../packages/cli/assets/templates/pages/dashboard/page'),
   ),
-  'dashboard-portfolio': lazy(
+  'dashboard-composition': lazy(
     () =>
-      import('../../../../packages/cli/assets/templates/pages/dashboard-portfolio/page'),
+      import('../../../../packages/cli/assets/templates/pages/dashboard-composition/page'),
   ),
   'detail-page': lazy(
     () =>
@@ -76,6 +80,22 @@ export const TEMPLATE_COMPONENTS: Record<
   'form-two-column': lazy(
     () =>
       import('../../../../packages/cli/assets/templates/pages/form-two-column/page'),
+  ),
+  'form-wizard': lazy(
+    () =>
+      import('../../../../packages/cli/assets/templates/pages/form-wizard/page'),
+  ),
+  'form-wizard-dialog': lazy(
+    () =>
+      import('../../../../packages/cli/assets/templates/pages/form-wizard-dialog/page'),
+  ),
+  'form-wizard-inline': lazy(
+    () =>
+      import('../../../../packages/cli/assets/templates/pages/form-wizard-inline/page'),
+  ),
+  'form-wizard-vertical': lazy(
+    () =>
+      import('../../../../packages/cli/assets/templates/pages/form-wizard-vertical/page'),
   ),
   'gallery-hero': lazy(
     () =>
@@ -154,13 +174,25 @@ export const TEMPLATE_COMPONENTS: Record<
   table: lazy(
     () => import('../../../../packages/cli/assets/templates/pages/table/page'),
   ),
+  'table-filter': lazy(
+    () =>
+      import('../../../../packages/cli/assets/templates/pages/table-filter/page'),
+  ),
   'table-grouped': lazy(
     () =>
       import('../../../../packages/cli/assets/templates/pages/table-grouped/page'),
   ),
+  'table-inbox': lazy(
+    () =>
+      import('../../../../packages/cli/assets/templates/pages/table-inbox/page'),
+  ),
   'table-page': lazy(
     () =>
       import('../../../../packages/cli/assets/templates/pages/table-page/page'),
+  ),
+  'work-item-detail': lazy(
+    () =>
+      import('../../../../packages/cli/assets/templates/pages/work-item-detail/page'),
   ),
   'marketing-feature-sections': lazy(
     () =>

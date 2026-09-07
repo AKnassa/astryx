@@ -6,14 +6,42 @@
  */
 
 import {render, screen} from '@testing-library/react';
-import {describe, it, expect} from 'vitest';
+import {describe, it, expect, vi} from 'vitest';
 import {Heading} from './Heading';
+
+declare module './index' {
+  interface HeadingTypeMap {
+    hero: true;
+  }
+}
 
 describe('Heading', () => {
   describe('rendering', () => {
     it('renders children correctly', () => {
       render(<Heading level={1}>Page Title</Heading>);
       expect(screen.getByText('Page Title')).toBeInTheDocument();
+    });
+
+    it('keeps a forwarded ref attached across rerenders', () => {
+      const ref = vi.fn();
+      const {rerender} = render(
+        <Heading ref={ref} level={1}>
+          Before
+        </Heading>,
+      );
+
+      const element = screen.getByText('Before');
+      expect(ref).toHaveBeenLastCalledWith(element);
+      ref.mockClear();
+
+      rerender(
+        <Heading ref={ref} level={1}>
+          After
+        </Heading>,
+      );
+
+      expect(ref).not.toHaveBeenCalled();
+      expect(screen.getByText('After')).toBe(element);
     });
 
     it('renders h1 for level 1', () => {
@@ -186,6 +214,28 @@ describe('Heading', () => {
       );
       const element = screen.getByText('Display Heading');
       expect(element.className).toContain('display-1');
+    });
+
+    it('reflects a theme-augmented visual type and keeps the level baseline', () => {
+      const baseline = render(<Heading level={2}>Baseline</Heading>);
+      const baselineClasses = screen
+        .getByText('Baseline')
+        .className.split(/\s+/)
+        .filter(Boolean);
+      baseline.unmount();
+
+      render(
+        <Heading level={2} type="hero">
+          Custom visual role
+        </Heading>,
+      );
+      const element = screen.getByText('Custom visual role');
+
+      expect(element).toHaveAttribute('data-type', 'hero');
+      expect(element.className).toContain('hero');
+      for (const className of baselineClasses) {
+        expect(element.className).toContain(className);
+      }
     });
   });
 

@@ -25,6 +25,7 @@
  *
  * SYNC: When modified, update:
  * - /packages/core/src/DateInput/TouchDateField.tsx
+ * - /packages/core/src/DateTimeInput/TouchDateTimeField.tsx
  * - /packages/core/src/DateInput/DateInput.doc.mjs
  * - /packages/core/src/DateInput/DateInputTouch.test.tsx
  */
@@ -39,7 +40,7 @@ import {
 } from 'react';
 import * as stylex from '@stylexjs/stylex';
 import {useCalendarDays} from '../Calendar';
-import {useDirection} from '../i18n';
+import {useDirection, useLocale} from '../i18n';
 import {
   colorVars,
   radiusVars,
@@ -149,7 +150,10 @@ const styles = stylex.create({
     color: colorVars['--color-text-primary'],
     fontSize: typeScaleVars['--text-body-size'],
     fontWeight: fontWeightVars['--font-weight-normal'],
-    cursor: 'pointer',
+    cursor: {
+      default: 'pointer',
+      ':is(:disabled,[aria-disabled="true"])': 'default',
+    },
     // A tap on a 44px target should not also select the number inside it.
     userSelect: 'none',
     WebkitTapHighlightColor: 'transparent',
@@ -246,7 +250,7 @@ const styles = stylex.create({
     // five levels apart, which is no difference at all. That is the whole
     // reason the two were hard to tell apart.
     opacity: 0.3,
-    cursor: 'not-allowed',
+    cursor: 'default',
   },
 });
 
@@ -760,6 +764,7 @@ function MonthPane({
   onDayKeyDown,
   onDayFocus,
 }: MonthPaneProps) {
+  const locale = useLocale();
   const {year, month} = fromMonthIndex(monthIndex);
   const {weeks} = useCalendarDays({
     year,
@@ -773,6 +778,7 @@ function MonthPane({
   const monthLabel = plainDateFormat(
     {year, month, day: 1},
     DATE_FORMAT_MONTH_YEAR,
+    locale,
   );
 
   // Exactly one day per pane is tab-reachable, so Tab moves through the
@@ -833,6 +839,7 @@ function MonthPane({
                   aria-label={plainDateFormat(
                     day.date,
                     DATE_FORMAT_WITH_WEEKDAY,
+                    locale,
                   )}
                   aria-disabled={isDisabled || undefined}
                   aria-current={isToday ? 'date' : undefined}
