@@ -16,14 +16,7 @@
  * - /packages/cli/assets/templates/blocks/components/DateRangeInput/ (showcase blocks)
  */
 
-import {
-  use,
-  useId,
-  useCallback,
-  useMemo,
-  useOptimistic,
-  useTransition,
-} from 'react';
+import {useId, useCallback, useMemo, useOptimistic, useTransition} from 'react';
 import * as stylex from '@stylexjs/stylex';
 import {
   plainDateFromISO,
@@ -72,7 +65,7 @@ import {useResolvedRequired} from '../hooks/useResolvedRequired';
 import {themeProps} from '../utils/themeProps';
 import {focusOutlineStyles} from '../utils/focusOutline.stylex';
 import {stableClassName} from '../naming';
-import {useTranslator, InternationalizationContext} from '../i18n';
+import {useLocale, useTranslator} from '../i18n';
 import type {Locale} from '../i18n/types';
 
 export type {DateRange} from '../Calendar';
@@ -106,7 +99,10 @@ const styles = stylex.create({
     color: colorVars['--color-text-primary'],
     backgroundColor: 'transparent',
     outline: 'none',
-    cursor: 'pointer',
+    cursor: {
+      default: 'pointer',
+      ':is(:disabled,[aria-disabled="true"])': 'default',
+    },
     textAlign: 'start',
     whiteSpace: 'nowrap',
     overflow: 'hidden',
@@ -116,7 +112,7 @@ const styles = stylex.create({
     color: colorVars['--color-text-secondary'],
   },
   triggerDisabled: {
-    cursor: 'not-allowed',
+    cursor: 'default',
   },
   iconButton: {
     display: 'flex',
@@ -127,11 +123,14 @@ const styles = stylex.create({
     borderWidth: 0,
     borderStyle: 'none',
     backgroundColor: 'transparent',
-    cursor: 'pointer',
+    cursor: {
+      default: 'pointer',
+      ':is(:disabled,[aria-disabled="true"])': 'default',
+    },
     borderRadius: radiusVars['--radius-element'],
   },
   iconButtonDisabled: {
-    cursor: 'not-allowed',
+    cursor: 'default',
   },
   popoverLayout: {
     display: 'flex',
@@ -164,7 +163,10 @@ const styles = stylex.create({
     fontSize: typeScaleVars['--text-label-size'],
     lineHeight: typeScaleVars['--text-label-leading'],
     color: colorVars['--color-text-primary'],
-    cursor: 'pointer',
+    cursor: {
+      default: 'pointer',
+      ':is(:disabled,[aria-disabled="true"])': 'default',
+    },
     textAlign: 'start',
   },
   presetButtonActive: {
@@ -173,7 +175,7 @@ const styles = stylex.create({
   },
   presetButtonDisabled: {
     color: colorVars['--color-text-disabled'],
-    cursor: 'not-allowed',
+    cursor: 'default',
     backgroundColor: 'transparent',
   },
 });
@@ -193,7 +195,7 @@ const sizeStyles = stylex.create({
   },
 });
 
-function formatRangeDisplay(range: DateRange | null, locale?: Locale): string {
+function formatRangeDisplay(range: DateRange | null, locale: Locale): string {
   if (!range) {
     return '';
   }
@@ -365,8 +367,10 @@ export interface DateRangeInputProps extends Omit<
    * Minimum number of days the selected range must span, counting both
    * endpoints — `minRangeSpan={2}` forbids a single-day range. Once a start
    * date is picked, days closer than this to it are disabled — except the
-   * start itself, which stays selectable as the active anchor. Defaults to 1
-   * (a same-day start and end is allowed).
+   * start itself, which stays selectable. Clicking the start again commits a
+   * one-day range when the minimum allows it; otherwise it cancels the
+   * in-progress selection so the start can be moved. Defaults to 1 (a
+   * same-day start and end is allowed).
    */
   minRangeSpan?: number;
 
@@ -482,8 +486,8 @@ export function DateRangeInput({
   ...rest
 }: DateRangeInputProps) {
   const t = useTranslator();
+  const locale = useLocale();
   const isEffectivelyRequired = useResolvedRequired({isRequired, isOptional});
-  const {locale} = use(InternationalizationContext);
   const placeholder =
     placeholderFromProps ?? t('@astryx.dateRangeInput.placeholder');
   const size = useSize(sizeProp, 'md');
