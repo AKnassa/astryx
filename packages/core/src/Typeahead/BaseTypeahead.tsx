@@ -737,6 +737,13 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
   // Handle item selection
   const handleSelect = useCallback(
     (item: T) => {
+      // FR4's pointer half: a parent can flip the field to focusable-disabled
+      // while the menu is open (nothing closes it on the flip), and the
+      // options stay clickable. Selection is an edit, so it is blocked here
+      // the way the keydown guard blocks the keyboard paths.
+      if (isDisabled) {
+        return;
+      }
       // Bump generation to invalidate any in-flight async searches
       searchGenRef.current++;
       if (searchTimeoutRef.current) {
@@ -755,7 +762,7 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
       popover.hide();
       inputRef.current?.focus();
     },
-    [onChange, popover, searchSource, setLoading],
+    [isDisabled, onChange, popover, searchSource, setLoading],
   );
 
   // Handle focus
@@ -820,8 +827,14 @@ export const BaseTypeahead = function BaseTypeahead<T extends SearchableItem>({
 
       // A focusable-disabled input (isDisabled with a disabled reason) is
       // readOnly but still receives keys: without this guard ArrowDown could
-      // bootstrap entries and Enter select one (family FR4).
-      if (isDisabled) {
+      // bootstrap entries and Enter select one (family FR4). FR4 blocks
+      // edits, not dismissal: Tab passes through to its keydown dismissal
+      // below, which must not be left to the blur it causes — hiding a
+      // top-layer popover during focusout makes Chrome abandon the focus
+      // move and strand focus on <body>. Escape needs no passthrough: the
+      // shared layer stack (useLayerDismissal) sees the unclaimed press and
+      // closes the menu as the topmost layer, exactly as when enabled.
+      if (isDisabled && e.key !== 'Tab') {
         return;
       }
 
