@@ -1168,6 +1168,78 @@ describe('Tokenizer', () => {
       expect(onChange).not.toHaveBeenCalled();
     });
 
+    // Open the menu enabled, then flip to focusable-disabled — the shape of
+    // a parent disabling the field mid-save. Nothing closes the menu on the
+    // flip (auto-closing would flicker on short saves), so the dismissal
+    // keys must keep working: FR4 blocks edits, not dismissal.
+    const openMenuThenDisable = async (onChange: () => void) => {
+      const ui = (isDisabled: boolean) => (
+        <Tokenizer
+          label="Members"
+          searchSource={userSource}
+          value={[]}
+          onChange={onChange}
+          debounceMs={0}
+          isDisabled={isDisabled}
+          disabledMessage={isDisabled ? 'Saving your changes' : undefined}
+        />
+      );
+      const {rerender} = render(ui(false));
+      const input = screen.getByRole('combobox');
+      await act(async () => {
+        fireEvent.change(input, {target: {value: 'Al'}});
+      });
+      await act(async () => {
+        await new Promise(r => setTimeout(r, 50));
+      });
+      expect(screen.getByText('Alice')).toBeInTheDocument();
+      expect(input).toHaveAttribute('aria-expanded', 'true');
+      rerender(ui(true));
+      // The premise the tests below stand on: the flip itself leaves the
+      // menu open. If a future change closes it here, these tests would
+      // pass without exercising anything.
+      expect(input).toHaveAttribute('aria-expanded', 'true');
+      return input;
+    };
+
+    it('keeps Escape dismissing an already-open menu after the field turns focusable-disabled', async () => {
+      const onChange = vi.fn();
+      const input = await openMenuThenDisable(onChange);
+      // Not the input's own handler — while disabled it swallows Escape —
+      // but the shared layer stack (useLayerDismissal) routing the unclaimed
+      // press to the topmost layer. This locks that invariant: a disabled
+      // guard that also stopped propagation would break it.
+      await act(async () => {
+        fireEvent.keyDown(input, {key: 'Escape'});
+      });
+      expect(input).toHaveAttribute('aria-expanded', 'false');
+      expect(onChange).not.toHaveBeenCalled();
+    });
+
+    it('keeps Tab dismissing on keydown after the field turns focusable-disabled', async () => {
+      const onChange = vi.fn();
+      const input = await openMenuThenDisable(onChange);
+      // On the keydown itself, not the blur it causes: hiding a top-layer
+      // popover during focusout makes Chrome abandon the focus move and
+      // drop the keyboard user on <body>.
+      await act(async () => {
+        fireEvent.keyDown(input, {key: 'Tab'});
+      });
+      expect(input).toHaveAttribute('aria-expanded', 'false');
+      expect(onChange).not.toHaveBeenCalled();
+    });
+
+    it('ignores an option click after the field turns focusable-disabled', async () => {
+      const onChange = vi.fn();
+      await openMenuThenDisable(onChange);
+      // The still-open menu's options remain clickable; selection is an
+      // edit, and FR4 blocks it on the pointer path like the keyboard ones.
+      await act(async () => {
+        fireEvent.click(screen.getByText('Alice'));
+      });
+      expect(onChange).not.toHaveBeenCalled();
+    });
+
     it('keeps the input natively disabled when disabled without a reason', () => {
       render(
         <Tokenizer
