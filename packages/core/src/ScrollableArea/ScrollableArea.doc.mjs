@@ -17,6 +17,7 @@ export const docs = {
       {guidance: true, description: 'Use logical padding props on the content box so nested full-bleed components receive the same inset geometry.'},
       {guidance: true, description: 'Set `isFullBleed` only when the viewport itself should reach an ancestor container edge; it is off by default.'},
       {guidance: true, description: 'Set `stickyContainment="always"` only when a fitting viewport should intentionally remain a Sticky boundary.'},
+      {guidance: true, description: 'Target `data-axis` on the viewport for theme selectors; the `data-scroll-*` attributes are live behavior state (effective axes and logical edges) for presentation hooks.'},
       {guidance: false, description: 'Hide the native scrollbar without another visible and operable overflow affordance.'},
       {guidance: false, description: 'Add another overflow wrapper around ScrollableArea; one native viewport should own scrolling.'},
     ],
@@ -44,7 +45,7 @@ export const docs = {
     {name: 'paddingBlockEnd', type: '0 | 0.5 | 1 | 1.5 | 2 | 3 | 4 | 5 | 6 | 8 | 10', description: 'Logical block-end content padding; overrides broader padding values.'},
     {name: 'isFullBleed', type: 'boolean', description: 'Lets the viewport escape inherited container padding without changing content padding.', default: 'false'},
     {name: 'children', type: 'ReactNode', description: 'Content rendered inside the observed content box.'},
-    {name: 'xstyle', type: 'StyleXStyles', description: 'StyleX sizing and native scrollbar presentation overrides for the viewport.'},
+    {name: 'xstyle', type: 'StyleXStyles', description: 'StyleX sizing and native scrollbar presentation overrides for the viewport. Must be a `stylex.create()` value, not an inline style object.'},
   ],
   playground: {
     defaults: {
