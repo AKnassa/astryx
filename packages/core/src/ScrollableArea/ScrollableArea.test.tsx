@@ -361,15 +361,28 @@ describe('ScrollableArea', () => {
         Messages
       </ScrollableArea>,
     );
+    const viewport = screen.getByTestId('viewport');
     const css = collectCssText();
-    expect(css).toMatch(/scrollbar-color:[^;{}]*transparent/);
-    expect(css).toMatch(
-      /@media \(forced-colors:\s*active\)\s*\{[^{}]*\{[^{}]*scrollbar-color:\s*auto/,
-    );
+    // Anchor every assertion to a class the rendered viewport carries --
+    // runtime injection emits rules for unused styles too, so an unanchored
+    // match would pass even if the viewport stopped composing these styles.
+    const thumbRules = [
+      ...css.matchAll(/\.([\w-]+)[^{]*\{[^{}]*scrollbar-color:([^;{}]*);/g),
+    ].filter(match => viewport.classList.contains(match[1]));
     // The thumb reads the neutral token rather than a literal colour.
-    const scrollbarRules =
-      css.match(/scrollbar-color:[^;{}]*transparent/g) ?? [];
-    expect(scrollbarRules.some(rule => rule.includes('var('))).toBe(true);
+    expect(
+      thumbRules.some(
+        match => match[2].includes('var(') && match[2].includes('transparent'),
+      ),
+    ).toBe(true);
+    const forcedRules = [
+      ...css.matchAll(
+        /@media \(forced-colors:\s*active\)\s*\{\s*\.([\w-]+)[^{]*\{[^{}]*scrollbar-color:\s*auto/g,
+      ),
+    ];
+    expect(
+      forcedRules.some(match => viewport.classList.contains(match[1])),
+    ).toBe(true);
   });
 
   it('guards scroll-state query containment as a progressive enhancement', () => {
@@ -378,15 +391,22 @@ describe('ScrollableArea', () => {
         Messages
       </ScrollableArea>,
     );
+    const viewport = screen.getByTestId('viewport');
     const css = collectCssText();
     // The @supports condition guards the block...
     expect(css).toMatch(/@supports \(container-type:\s*scroll-state\)/);
-    // ...and the guarded rule must actually declare `container-type: scroll-state`.
-    // Match the declaration INSIDE the block, not the condition text: a mutation to
-    // `container-type: inline-size` leaves the condition intact, so a plain
-    // toContain('container-type: scroll-state') would still pass on it.
-    expect(css).toMatch(
-      /@supports \(container-type:\s*scroll-state\)\s*\{\s*[^{}]*\{[^{}]*container-type:\s*scroll-state\s*;/,
+    // ...and the guarded rule must declare `container-type: scroll-state`
+    // INSIDE the block (a mutated declaration keeps the condition text), on a
+    // class the rendered viewport actually carries (runtime injection emits
+    // rules for unused styles too).
+    const guarded = [
+      ...css.matchAll(
+        /@supports \(container-type:\s*scroll-state\)\s*\{\s*\.([\w-]+)[^{]*\{[^{}]*container-type:\s*scroll-state\s*;/g,
+      ),
+    ];
+    expect(guarded.length).toBeGreaterThan(0);
+    expect(guarded.some(match => viewport.classList.contains(match[1]))).toBe(
+      true,
     );
   });
 });
