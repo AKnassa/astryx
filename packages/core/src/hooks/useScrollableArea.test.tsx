@@ -626,7 +626,15 @@ describe('useScrollableArea', () => {
       atEnd: false,
     });
 
-    setGeometry(viewport, {clientWidth: 0, clientHeight: 0});
+    // A collapsed box zeroes every metric; an unguarded remeasure would
+    // publish inactive state instead of preserving the last valid one.
+    setGeometry(viewport, {
+      clientWidth: 0,
+      clientHeight: 0,
+      scrollWidth: 0,
+      scrollHeight: 0,
+      scrollLeft: 0,
+    });
     void act(() => viewport.dispatchEvent(new Event('scroll')));
     flushFrame();
     expect(state().inline).toEqual({
