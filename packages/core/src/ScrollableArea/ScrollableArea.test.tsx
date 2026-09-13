@@ -379,8 +379,15 @@ describe('ScrollableArea', () => {
       </ScrollableArea>,
     );
     const css = collectCssText();
-    expect(css).toContain('container-type: scroll-state');
+    // The @supports condition guards the block...
     expect(css).toMatch(/@supports \(container-type:\s*scroll-state\)/);
+    // ...and the guarded rule must actually declare `container-type: scroll-state`.
+    // Match the declaration INSIDE the block, not the condition text: a mutation to
+    // `container-type: inline-size` leaves the condition intact, so a plain
+    // toContain('container-type: scroll-state') would still pass on it.
+    expect(css).toMatch(
+      /@supports \(container-type:\s*scroll-state\)\s*\{\s*[^{}]*\{[^{}]*container-type:\s*scroll-state\s*;/,
+    );
   });
 });
 
