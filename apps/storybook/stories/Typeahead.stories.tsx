@@ -353,9 +353,9 @@ export const InputBusy: Story = {
 
 /**
  * `changeAction` after every selection and clear. The proposed value shows at
- * once, and the field is busy until the controlled value accepts it — here the
- * parent commits only once the Action settles, the way a server round-trip
- * would, so the busy state is visible. A parent that sets the value
+ * once, and the field is busy until the controlled value accepts or replaces
+ * it — here the parent commits only once the Action settles, the way a server
+ * round-trip would, so the busy state is visible. A parent that sets the value
  * synchronously in `onChange` accepts it immediately and is never busy.
  */
 export const TransitionAction: Story = {

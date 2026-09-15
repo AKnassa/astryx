@@ -362,6 +362,14 @@ function EndLane({
   );
 }
 
+/**
+ * A pending `changeAction` proposal: the item shown optimistically and the
+ * controlled `value` it was proposed against. The proposal stands only while
+ * `value` is still that base; a parent that accepts or replaces the value
+ * mid-Action ends it at once (input-fields.md FR6).
+ */
+type ValueProposal<T> = {item: T | null; base: T | null};
+
 export function Typeahead<T extends SearchableItem>({
   ref,
   label,
@@ -438,10 +446,16 @@ export function Typeahead<T extends SearchableItem>({
 
   // The family's Transition Action: `onChange` first, the proposed item shown
   // optimistically, the Action in a transition, and one busy presentation
-  // until `value` accepts or replaces it (input-fields.md FR6). With no
-  // `changeAction` the optimistic value never diverges from the prop.
+  // until `value` accepts or replaces it (input-fields.md FR6). The pending
+  // proposal is the optimistic state, reverted to null as its Action settles
+  // (stacked proposals keep the latest), and it shows only while `value` is
+  // still the one it was proposed against: a replacement arriving mid-Action
+  // wins at once instead of waiting for the old Action to settle. With no
+  // `changeAction` nothing is proposed and the shown value is the prop.
   const [, startTransition] = useTransition();
-  const [optimisticValue, setOptimisticValue] = useOptimistic(value);
+  const [proposal, proposeValue] = useOptimistic<ValueProposal<T> | null>(null);
+  const optimisticValue =
+    proposal !== null && proposal.base === value ? proposal.item : value;
   // Value busy, as distinct from search busy: the base owns the latter and
   // reports it through the lane. Both reach the one Spinner in the end lane
   // and the combobox's aria-busy (FR5, FR7).
@@ -452,12 +466,12 @@ export function Typeahead<T extends SearchableItem>({
       onChange(item);
       if (changeAction) {
         startTransition(async () => {
-          setOptimisticValue(item);
+          proposeValue({item, base: value});
           await changeAction(item);
         });
       }
     },
-    [onChange, changeAction, setOptimisticValue],
+    [onChange, changeAction, proposeValue, value],
   );
 
   // Show token when value is selected and not in edit mode. The optimistic

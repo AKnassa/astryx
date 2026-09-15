@@ -138,7 +138,7 @@ export const docs = {
       name: 'changeAction',
       type: '(item: T | null) => void | Promise<void>',
       description:
-        'Async action after onChange, called with the same proposed item. Runs in a transition: the item shows optimistically and the field is busy (spinner and aria-busy) until value catches up. Selection and clear both go through it.',
+        'Async action after onChange, called with the same proposed item. Runs in a transition: the item shows optimistically and the field is busy (spinner and aria-busy) until value accepts or replaces it. Selection and clear both go through it.',
     },
     {
       name: 'placeholder',

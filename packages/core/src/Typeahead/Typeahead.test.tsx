@@ -2650,7 +2650,7 @@ describe('input busy: isLoading and changeAction', () => {
     expect(onChange).toHaveBeenCalledTimes(1);
   });
 
-  it('keeps the proposal until the Action settles when the parent replaces the value, then shows the replacement', async () => {
+  it("shows a controlled replacement at once while the Action is pending and ends that proposal's busy state", async () => {
     const {changeAction, resolvers} = deferredAction();
     const at = (value: SearchableItem | null) => (
       <Typeahead
@@ -2668,21 +2668,26 @@ describe('input busy: isLoading and changeAction', () => {
     await waitFor(() => {
       expect(token(view.container)).toHaveTextContent('Apple');
     });
-
-    // A different item from the parent mid-flight does not pre-empt the
-    // proposal; it lands when the transition finishes.
-    view.rerender(at(fruits[1]));
-    expect(token(view.container)).toHaveTextContent('Apple');
     expect(input).toHaveAttribute('aria-busy', 'true');
-    expect(screen.getAllByRole('status', {name: 'Loading'})).toHaveLength(1);
 
-    await settleAction(resolvers[0]);
+    // A different item from the parent mid-flight (external validation,
+    // another controlled update) replaces the proposal at once, before the
+    // old Action settles, and that proposal no longer holds the field busy:
+    // optimism ends when the controlled value accepts or replaces it
+    // (input-fields.md FR6).
+    view.rerender(at(fruits[1]));
     expect(token(view.container)).toHaveTextContent('Banana');
     expect(input).not.toHaveAttribute('aria-busy');
     expect(
       screen.queryByRole('status', {name: 'Loading'}),
     ).not.toBeInTheDocument();
-    // Edit mode reads the settled value, not a stale proposal.
+    expect(changeAction).toHaveBeenCalledTimes(1);
+
+    // The old Action settling later changes nothing the user can see.
+    await settleAction(resolvers[0]);
+    expect(token(view.container)).toHaveTextContent('Banana');
+    expect(input).not.toHaveAttribute('aria-busy');
+    // Edit mode reads the replacement, not the superseded proposal.
     await enterEditMode(view.container, input, 'Banana');
   });
 
