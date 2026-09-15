@@ -17,8 +17,10 @@ import {
   rmSync,
   writeFileSync,
 } from 'node:fs';
+import {createRequire} from 'node:module';
 import {tmpdir} from 'node:os';
 import path from 'node:path';
+import {fileURLToPath} from 'node:url';
 import {promisify} from 'node:util';
 import {describe, expect, it} from 'vitest';
 import {reconcileRegistryCompositions} from '../../packages/cli/api/upgrade/registry/registry.mjs';
@@ -45,6 +47,18 @@ import {
 } from '../../apps/docsite/src/lib/shadcnRegistry.mjs';
 
 const execFileAsync = promisify(execFile);
+
+const DOCSITE_ROOT = path.resolve(
+  path.dirname(fileURLToPath(import.meta.url)),
+  '../../apps/docsite',
+);
+
+// shadcn is a docsite dependency and its bin is the package entry, so resolving
+// it from docsite gives the script to run — no assumption about where the
+// installer put the package, and no dependence on NODE_PATH.
+const SHADCN_ENTRY = createRequire(
+  path.join(DOCSITE_ROOT, 'package.json'),
+).resolve('shadcn');
 
 const packages = [
   {name: '@astryxdesign/cli', version: '0.6.0'},
@@ -315,16 +329,47 @@ describe('buildShadcnRegistry', () => {
     }
   });
 
-  it('removes stale compatibility output for non-canary targets', () => {
+  it('generates exact-version compatibility output for production', () => {
     const root = mkdtempSync(path.join(tmpdir(), 'astryx-shadcn-production-'));
     const outDir = path.join(root, 'shadcn');
     try {
       mkdirSync(outDir, {recursive: true});
       writeFileSync(path.join(outDir, 'stale.json'), '{}\n');
 
+      const result = generateShadcnRegistryForTarget({
+        target: 'latest',
+        outDir,
+        ...fixture(),
+      });
+      expect(result.total).toBe(3);
+      expect(existsSync(path.join(outDir, 'stale.json'))).toBe(false);
+      const component = JSON.parse(
+        readFileSync(path.join(outDir, 'components', 'button.json'), 'utf8'),
+      );
+      expect(component.dependencies).toEqual([
+        '@astryxdesign/core@0.5.2',
+        '@stylexjs/stylex@0.19.0',
+      ]);
       expect(
-        generateShadcnRegistryForTarget({target: 'latest', outDir}),
-      ).toBeNull();
+        component.dependencies.some(dependency =>
+          dependency.includes('@canary'),
+        ),
+      ).toBe(false);
+    } finally {
+      rmSync(root, {recursive: true, force: true});
+    }
+  });
+
+  it('fails closed for an unknown registry target', () => {
+    const root = mkdtempSync(path.join(tmpdir(), 'astryx-shadcn-unknown-'));
+    const outDir = path.join(root, 'shadcn');
+    try {
+      mkdirSync(outDir, {recursive: true});
+      writeFileSync(path.join(outDir, 'stale.json'), '{}\n');
+
+      expect(() =>
+        generateShadcnRegistryForTarget({target: 'unknown', outDir}),
+      ).toThrow(/Unsupported ShadCN registry target/);
       expect(existsSync(outDir)).toBe(false);
     } finally {
       rmSync(root, {recursive: true, force: true});
@@ -425,8 +470,8 @@ describe('buildShadcnRegistry', () => {
       writeFileSync(itemPath, JSON.stringify(block));
 
       await execFileAsync(
-        path.resolve('node_modules/.bin/shadcn'),
-        ['add', itemPath, '--yes'],
+        process.execPath,
+        [SHADCN_ENTRY, 'add', itemPath, '--yes'],
         {cwd: project, timeout: 30_000},
       );
 
@@ -518,8 +563,8 @@ describe('buildShadcnRegistry', () => {
       writeFileSync(itemPath, JSON.stringify(block));
 
       await execFileAsync(
-        path.resolve('node_modules/.bin/shadcn'),
-        ['add', itemPath, '--yes'],
+        process.execPath,
+        [SHADCN_ENTRY, 'add', itemPath, '--yes'],
         {cwd: project, timeout: 30_000},
       );
 
@@ -599,8 +644,8 @@ describe('buildShadcnRegistry', () => {
       const itemPath = path.join(project, 'block.json');
       writeFileSync(itemPath, JSON.stringify(oldItem));
       await execFileAsync(
-        path.resolve('node_modules/.bin/shadcn'),
-        ['add', itemPath, '--yes'],
+        process.execPath,
+        [SHADCN_ENTRY, 'add', itemPath, '--yes'],
         {cwd: project, timeout: 30_000},
       );
       await new Promise((resolve, reject) => {
@@ -748,8 +793,8 @@ describe('buildShadcnRegistry', () => {
       const itemPath = path.join(project, 'page.json');
       writeFileSync(itemPath, JSON.stringify(page));
       await execFileAsync(
-        path.resolve('node_modules/.bin/shadcn'),
-        ['add', itemPath, '--yes'],
+        process.execPath,
+        [SHADCN_ENTRY, 'add', itemPath, '--yes'],
         {cwd: project, timeout: 30_000},
       );
 
@@ -825,8 +870,8 @@ describe('buildShadcnRegistry', () => {
       writeConsumerProject(project);
 
       await execFileAsync(
-        path.resolve('node_modules/.bin/shadcn'),
-        ['add', `${origin}/shadcn/examples/parent.json`, '--yes'],
+        process.execPath,
+        [SHADCN_ENTRY, 'add', `${origin}/shadcn/examples/parent.json`, '--yes'],
         {
           cwd: project,
           timeout: 30_000,
