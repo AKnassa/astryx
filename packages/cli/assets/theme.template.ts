@@ -291,8 +291,7 @@ export const myTheme = defineTheme({
 
   /**
    * Swap the artwork behind semantic icon names — every component that asks
-   * for `check`, `close`, `chevron-down` gets yours. Library extension keys
-   * (colon-namespaced, e.g. `'richtext:bold'`) are accepted too.
+   * for `check`, `close`, `chevron-down` gets yours.
    * Reference: `astryx docs icons` lists the names.
    */
   // icons: {check: <MyCheck />, close: <MyClose />},

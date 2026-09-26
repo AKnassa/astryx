@@ -34,16 +34,5 @@
       "prev": "button[aria-label=\"Previous\"]",
       "next": "button[aria-label=\"Next\"]"
     }
-  },
-  {
-    "component": "RichTextEditor",
-    "storyId": "lab-richtexteditor--with-toolbar",
-    "dims": [
-      "D2"
-    ],
-    "selectors": {
-      "prev": "button[aria-label=\"Undo\"]",
-      "next": "button[aria-label=\"Redo\"]"
-    }
   }
 ]

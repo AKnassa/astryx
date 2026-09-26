@@ -6,11 +6,8 @@
  * @output Unit tests for the opt-in Lexical editor components, including
  *   accessible label wiring, shared input visuals/status variants,
  *   placeholder semantics, canonical link-dialog layout, top-toolbar
- *   ordering and horizontal scrolling, i18n catalog routing, the read-only
- *   vs disabled ARIA split and editable-state sync across prop toggles,
- *   character-counter boundaries (ICU plurals), tabEscapeHint wiring,
- *   coarse-pointer touch-target floors, theme icon overrides, and RTL
- *   glyph mirroring
+ *   ordering and horizontal scrolling, and the read-only vs disabled ARIA
+ *   split with editable-state sync across prop toggles
  * @position Testing; validates RichTextEditor.tsx and RichTextView.tsx
  *
  * SYNC: When the editor components change, update these tests to match.
@@ -43,16 +40,12 @@ import {
 } from './markdownSerializers';
 import {RichTextEditorToolbar} from './RichTextEditorToolbar';
 import {registerIcons, resetIcons} from '@astryxdesign/core/Icon';
-import {InternationalizationProvider} from '@astryxdesign/core/i18n';
 import {
   RichTextEditorAutoLinkPlugin,
   DEFAULT_LINK_MATCHERS,
   NEW_TAB_LINK_ATTRIBUTES,
 } from './RichTextEditorAutoLinkPlugin';
 import {sanitizeUrl, validateUrl} from './linkUtils';
-import * as stylex from '@stylexjs/stylex';
-import {defineTheme, Theme} from '@astryxdesign/core/theme';
-import {rtlStyles} from '@astryxdesign/core/utils';
 
 // Closed popover-backed tooltips are intentionally hidden from the default
 // accessibility tree until their trigger opens them.
@@ -97,15 +90,6 @@ afterAll(() => {
     delete (HTMLDialogElement.prototype as {close?: unknown}).close;
   }
 });
-
-// StyleX class names are content-addressed: identical declarations compile to
-// identical atomic classes, so a style compiled here proves membership on an
-// element. Drops the human-readable debug name, which is not shared.
-function atomicClasses(style: stylex.StyleXStyles): string[] {
-  return (stylex.props(style).className ?? '')
-    .split(/\s+/)
-    .filter(c => /^x[a-z0-9]+$/.test(c));
-}
 
 // jsdom's Range does not implement getBoundingClientRect, which Lexical
 // calls (via scroll-into-view) whenever it reconciles a selection while the
@@ -1695,7 +1679,7 @@ describe('RichTextEditorToolbar — new-tab links', () => {
     });
   });
 
-  it('omits new-tab attributes when hasNewTabLinks is false', async () => {
+  it('omits new-tab attributes when linkOpensInNewTab is false', async () => {
     let editor!: LexicalEditor;
     const promptForUrl = vi.fn(() => 'example.com');
     render(
@@ -1704,7 +1688,7 @@ describe('RichTextEditorToolbar — new-tab links', () => {
         toolbar={
           <RichTextEditorToolbar
             promptForUrl={promptForUrl}
-            hasNewTabLinks={false}
+            linkOpensInNewTab={false}
           />
         }
         plugins={<CaptureEditor onReady={e => (editor = e)} />}
@@ -1744,200 +1728,6 @@ describe('RichTextEditorToolbar — new-tab links', () => {
       expect(sawLink).toBe(true);
       expect(target).toBeNull();
     });
-  });
-});
-
-describe('i18n', () => {
-  it('routes toolbar strings through the translation catalog', async () => {
-    render(
-      <InternationalizationProvider
-        locale="fr"
-        overrides={{
-          fr: {
-            '@astryx.richTextEditor.bold': 'Gras',
-            '@astryx.richTextEditor.blockFormat': 'Format de bloc',
-            '@astryx.richTextEditor.toolbarLabel': 'Mise en forme du texte',
-            '@astryx.richTextEditor.insertLink': 'Insérer un lien',
-          },
-        }}>
-        <RichTextEditor label="Notes" toolbar={<RichTextEditorToolbar />} />
-      </InternationalizationProvider>,
-    );
-    expect(
-      await screen.findByRole('button', {name: 'Gras'}),
-    ).toBeInTheDocument();
-    expect(
-      screen.getByRole('combobox', {name: 'Format de bloc'}),
-    ).toBeInTheDocument();
-    expect(
-      screen.getByRole('toolbar', {name: 'Mise en forme du texte'}),
-    ).toBeInTheDocument();
-  });
-
-  it('renders English toolbar strings with no provider', () => {
-    render(
-      <RichTextEditor label="Notes" toolbar={<RichTextEditorToolbar />} />,
-    );
-    expect(screen.getByRole('button', {name: 'Bold'})).toBeInTheDocument();
-    expect(
-      screen.getByRole('toolbar', {name: 'Text formatting'}),
-    ).toBeInTheDocument();
-  });
-
-  it('routes the counter announcement through the translation catalog', async () => {
-    render(
-      <InternationalizationProvider
-        locale="fr"
-        overrides={{
-          fr: {
-            '@astryx.richTextEditor.charactersOverLimit':
-              '{count, number} au-dessus de la limite',
-          },
-        }}>
-        <RichTextEditor
-          label="Notes"
-          defaultValue={HELLO_STATE}
-          maxLength={5}
-        />
-      </InternationalizationProvider>,
-    );
-    // "Hello world" is 11 characters; 6 over the 5-character limit.
-    await waitFor(() =>
-      expect(screen.getByText('6 au-dessus de la limite')).toBeInTheDocument(),
-    );
-  });
-
-  it('routes the tab-escape hint through the translation catalog', () => {
-    render(
-      <InternationalizationProvider
-        locale="fr"
-        overrides={{
-          fr: {
-            '@astryx.richTextEditor.tabEscapeHint':
-              'Échap puis Tab pour sortir.',
-          },
-        }}>
-        <RichTextEditor label="Notes" />
-      </InternationalizationProvider>,
-    );
-    expect(screen.getByText('Échap puis Tab pour sortir.')).toBeInTheDocument();
-  });
-
-  it('routes the link-dialog URL error through the translation catalog', async () => {
-    const user = userEvent.setup();
-    render(
-      <InternationalizationProvider
-        locale="fr"
-        overrides={{
-          fr: {'@astryx.richTextEditor.invalidUrl': 'URL invalide.'},
-        }}>
-        <RichTextEditor label="Notes" toolbar={<RichTextEditorToolbar />} />
-      </InternationalizationProvider>,
-    );
-    await user.click(screen.getByRole('button', {name: 'Link', ...h}));
-    const urlInput = await screen.findByRole('textbox', {name: 'URL', ...h});
-    await user.clear(urlInput);
-    await user.type(urlInput, 'javascript:alert(1)');
-    await user.click(
-      screen.getByRole('button', {name: /Add link|Ajouter/, ...h}),
-    );
-    await waitFor(() =>
-      expect(screen.getByText('URL invalide.')).toBeInTheDocument(),
-    );
-  });
-});
-
-describe('toolbar touch targets', () => {
-  // StyleX class names are content-addressed: identical declarations compile
-  // to identical atomic classes. Compiling the expected declarations here and
-  // asserting the toolbar controls carry those exact classes proves the
-  // coarse-pointer floor is applied, without depending on jsdom's partial
-  // media-rule injection.
-  const expectedFloor = stylex.create({
-    control: {
-      minBlockSize: {
-        default: null,
-        '@media (pointer: coarse)': '44px',
-      },
-      minInlineSize: {
-        default: null,
-        '@media (pointer: coarse)': '44px',
-      },
-    },
-  });
-
-  const floorClasses = atomicClasses(expectedFloor.control);
-
-  it('compiles a non-empty coarse-pointer floor fixture', () => {
-    expect(floorClasses.length).toBeGreaterThan(0);
-  });
-
-  it('expands the history and formatting buttons on coarse pointers', () => {
-    render(
-      <RichTextEditor label="Notes" toolbar={<RichTextEditorToolbar />} />,
-    );
-    const undo = screen.getByRole('button', {name: 'Undo'});
-    const bold = screen.getByRole('button', {name: 'Bold'});
-    for (const cls of floorClasses) {
-      expect([...undo.classList]).toContain(cls);
-      expect([...bold.classList]).toContain(cls);
-    }
-  });
-
-  it('expands the block-format selector on coarse pointers', () => {
-    render(
-      <RichTextEditor label="Notes" toolbar={<RichTextEditorToolbar />} />,
-    );
-    const combobox = screen.getByRole('combobox', {name: 'Block format'});
-    const container = combobox.parentElement as HTMLElement;
-    for (const cls of floorClasses) {
-      expect([...container.classList]).toContain(cls);
-    }
-  });
-});
-
-describe('toolbar icons', () => {
-  it('lets a theme override richtext:* icons via defineTheme({icons})', () => {
-    const theme = defineTheme({
-      name: 'richtext-icon-test',
-      icons: {'richtext:bold': <span data-testid="themed-bold">B</span>},
-    });
-    render(
-      <Theme theme={theme}>
-        <RichTextEditor label="Notes" toolbar={<RichTextEditorToolbar />} />
-      </Theme>,
-    );
-    expect(screen.getByTestId('themed-bold')).toBeInTheDocument();
-  });
-
-  it('draws heading text glyphs with tokens, not inline styles', () => {
-    render(
-      <RichTextEditor label="Notes" toolbar={<RichTextEditorToolbar />} />,
-    );
-    const glyph = screen.getAllByText('¶')[0];
-    // Raw inline font styling is unreachable by themes; the glyph must be
-    // styled through StyleX tokens.
-    expect(glyph.getAttribute('style')).toBeNull();
-    expect([...glyph.classList].some(c => c.startsWith('x'))).toBe(true);
-  });
-
-  it('mirrors the undo/redo glyphs in RTL', () => {
-    render(
-      <RichTextEditor label="Notes" toolbar={<RichTextEditorToolbar />} />,
-    );
-    // rtlStyles.mirror is the shared cross-package mirror style; carrying its
-    // atomic classes proves the glyph flips under [dir="rtl"].
-    const mirrorClasses = atomicClasses(rtlStyles.mirror);
-    expect(mirrorClasses.length).toBeGreaterThan(0);
-    for (const name of ['Undo', 'Redo']) {
-      const button = screen.getByRole('button', {name});
-      const mirrored = [...button.querySelectorAll('*')].some(el =>
-        mirrorClasses.every(c => (el as HTMLElement).classList.contains(c)),
-      );
-      expect(mirrored, `${name} glyph should carry rtlStyles.mirror`).toBe(
-        true,
-      );
-    }
   });
 });
 
@@ -2064,98 +1854,6 @@ describe('isReadOnly + isDisabled combined', () => {
   });
 });
 
-describe('character counter boundaries', () => {
-  it('announces "0 characters remaining" exactly at maxLength', async () => {
-    // Exactly 10 characters with a limit of 10: at the limit but not over it,
-    // so the remaining branch fires with count 0 (plural "characters").
-    render(
-      <RichTextEditor
-        label="Notes"
-        defaultValue={makeParagraphState('0123456789')}
-        maxLength={10}
-      />,
-    );
-    await waitFor(() => expect(screen.getByText('10/10')).toBeInTheDocument());
-    expect(screen.getByText('0 characters remaining')).toBeInTheDocument();
-  });
-
-  it('announces the ICU singular "1 character over limit" one past the limit', async () => {
-    // 11 characters with a limit of 10 — exactly one over. The ICU plural
-    // must select the singular "character" (no trailing s).
-    render(
-      <RichTextEditor
-        label="Notes"
-        defaultValue={makeParagraphState('0123456789X')}
-        maxLength={10}
-      />,
-    );
-    await waitFor(() => expect(screen.getByText('11/10')).toBeInTheDocument());
-    expect(screen.getByText('1 character over limit')).toBeInTheDocument();
-    expect(
-      screen.queryByText('1 characters over limit'),
-    ).not.toBeInTheDocument();
-  });
-
-  it('keeps the polite live region empty below the warning threshold', async () => {
-    // 7 characters with a limit of 10 sits below the 0.8 warning threshold
-    // (7 < 8): the visible counter renders but the live region announces
-    // nothing, so screen-reader users are not chattered at prematurely.
-    render(
-      <RichTextEditor
-        label="Notes"
-        defaultValue={makeParagraphState('seven77')}
-        maxLength={10}
-      />,
-    );
-    const counter = await screen.findByText('7/10');
-    const liveRegion = counter.querySelector('[aria-live="polite"]');
-    expect(liveRegion).not.toBeNull();
-    expect(liveRegion).toHaveTextContent('');
-  });
-});
-
-describe('tabEscapeHint aria wiring', () => {
-  const DEFAULT_HINT = 'Press Escape then Tab to move focus out of the editor.';
-
-  it('keeps other aria-describedby references when the hint is suppressed', () => {
-    // With tabEscapeHint="" the hint is omitted, but aria-describedby must
-    // survive for the remaining sources (here: the placeholder), rather than
-    // disappearing wholesale or referencing a hint id that renders nothing.
-    render(
-      <RichTextEditor
-        label="Notes"
-        placeholder="Write something…"
-        tabEscapeHint=""
-      />,
-    );
-    expect(screen.queryByText(DEFAULT_HINT)).not.toBeInTheDocument();
-    const textbox = screen.getByRole('textbox');
-    const describedBy = textbox.getAttribute('aria-describedby');
-    expect(describedBy).toBeTruthy();
-    const ids = describedBy!.split(/\s+/);
-    expect(ids).toContain(screen.getByText('Write something…').id);
-    // Every referenced id resolves to a real element, and none of them is a
-    // tab-escape hint.
-    for (const id of ids) {
-      const referenced = document.getElementById(id);
-      expect(referenced).not.toBeNull();
-      expect(referenced).not.toHaveTextContent(DEFAULT_HINT);
-    }
-  });
-
-  it('wires a custom hint into aria-describedby in place of the default', () => {
-    render(<RichTextEditor label="Notes" tabEscapeHint="Custom escape hint" />);
-    const hint = screen.getByText('Custom escape hint');
-    expect(screen.queryByText(DEFAULT_HINT)).not.toBeInTheDocument();
-    expect(hint.id).not.toBe('');
-    expect(
-      (
-        screen.getByRole('textbox').getAttribute('aria-describedby') ?? ''
-      ).split(/\s+/),
-    ).toContain(hint.id);
-  });
-});
-
 describe('imperative ref across editable prop toggles', () => {
   stubRangeRects();
 
@@ -2193,153 +1891,6 @@ describe('imperative ref across editable prop toggles', () => {
       expect(anchorNode).not.toBeNull();
       expect(textbox.contains(anchorNode)).toBe(true);
     });
-  });
-});
-
-describe('aria-describedby composition', () => {
-  // Reads every id the textbox points at and proves each one resolves.
-  function describedByIDs(): string[] {
-    return (screen.getByRole('textbox').getAttribute('aria-describedby') ?? '')
-      .split(/\s+/)
-      .filter(Boolean);
-  }
-
-  it('leaves no dangling id when maxLength is not a number', () => {
-    // The counter renders under `typeof maxLength === 'number'`; the id list
-    // must use the same guard, or it references an element that never mounts.
-    render(
-      <RichTextEditor label="Notes" maxLength={'100' as unknown as number} />,
-    );
-    expect(screen.queryByText(/\d+\/\d+/)).not.toBeInTheDocument();
-    const ids = describedByIDs();
-    expect(ids.length).toBeGreaterThan(0);
-    for (const id of ids) {
-      expect(document.getElementById(id), `dangling id: ${id}`).not.toBeNull();
-    }
-  });
-
-  it('merges a consumer aria-describedby with the computed ids', async () => {
-    render(
-      <RichTextEditor
-        label="Notes"
-        placeholder="Write…"
-        maxLength={100}
-        aria-describedby="host-help"
-      />,
-    );
-    const counter = await screen.findByText('0/100');
-    const ids = describedByIDs();
-    // The consumer's description is additive — it must not silently strip the
-    // editor's own placeholder, counter and tab-escape descriptions.
-    expect(ids).toContain('host-help');
-    expect(ids).toContain(counter.id);
-    expect(ids).toContain(screen.getByText('Write…').id);
-    expect(ids).toContain(
-      screen.getByText('Press Escape then Tab to move focus out of the editor.')
-        .id,
-    );
-  });
-
-  it('forwards rest props through to the textbox', () => {
-    render(
-      <RichTextEditor
-        label="Notes"
-        {...({'data-testid': 'editor-surface'} as Record<string, string>)}
-      />,
-    );
-    expect(screen.getByTestId('editor-surface')).toBe(
-      screen.getByRole('textbox'),
-    );
-  });
-
-  it('does not let a consumer prop clobber the textbox semantics', () => {
-    render(
-      <RichTextEditor
-        label="Notes"
-        {...({role: 'presentation', 'aria-multiline': 'false'} as Record<
-          string,
-          string
-        >)}
-      />,
-    );
-    const textbox = screen.getByRole('textbox');
-    expect(textbox).toHaveAttribute('aria-multiline', 'true');
-  });
-});
-
-describe('maxLength boundaries', () => {
-  it('renders and announces the counter at maxLength={0}', async () => {
-    // The falsy boundary the `typeof maxLength === 'number'` guard exists to
-    // preserve: 0 is a real limit, not "no limit".
-    render(<RichTextEditor label="Notes" maxLength={0} />);
-    const counter = await screen.findByText('0/0');
-    expect(screen.getByText('0 characters remaining')).toBeInTheDocument();
-    const ids = (
-      screen.getByRole('textbox').getAttribute('aria-describedby') ?? ''
-    ).split(/\s+/);
-    expect(ids).toContain(counter.id);
-  });
-
-  it('counts characters, not UTF-16 code units', async () => {
-    // Three thumbs-up are three characters and six code units. TextArea's
-    // counter uses `characterCount` for exactly this reason; the editor's
-    // must agree, or an emoji silently eats two of the user's budget.
-    render(
-      <RichTextEditor
-        label="Notes"
-        defaultValue={makeParagraphState('\u{1F44D}'.repeat(3))}
-        maxLength={5}
-      />,
-    );
-    expect(await screen.findByText('3/5')).toBeInTheDocument();
-    expect(screen.queryByText(/over limit/)).not.toBeInTheDocument();
-  });
-
-  it('counts a ZWJ emoji sequence as one character', async () => {
-    // The family emoji is 11 code units but one grapheme.
-    render(
-      <RichTextEditor
-        label="Notes"
-        defaultValue={makeParagraphState(
-          ['\u{1F468}', '\u{1F469}', '\u{1F467}', '\u{1F466}'].join('\u200D'),
-        )}
-        maxLength={5}
-      />,
-    );
-    expect(await screen.findByText('1/5')).toBeInTheDocument();
-  });
-
-  it('follows live text edits and clears a stale announcement', async () => {
-    let editor: LexicalEditor | undefined;
-    render(
-      <RichTextEditor
-        label="Notes"
-        defaultValue={HELLO_STATE}
-        maxLength={5}
-        plugins={<CaptureEditor onReady={e => (editor = e)} />}
-      />,
-    );
-    await waitFor(() => expect(screen.getByText('11/5')).toBeInTheDocument());
-    expect(screen.getByText('6 characters over limit')).toBeInTheDocument();
-
-    // Drive a real edit so the registerTextContentListener path runs, not
-    // just the mount-time seed.
-    act(() => {
-      editor!.update(() => {
-        const root = $getRoot();
-        root.clear();
-        const paragraph = $createParagraphNode();
-        paragraph.append($createTextNode('hi'));
-        root.append(paragraph);
-      });
-    });
-
-    await waitFor(() => expect(screen.getByText('2/5')).toBeInTheDocument());
-    // Back under the warning threshold, so the stale overflow announcement
-    // must be gone rather than left sitting in the live region.
-    expect(
-      screen.queryByText('6 characters over limit'),
-    ).not.toBeInTheDocument();
   });
 });
 
@@ -2410,30 +1961,5 @@ describe('toolbar follows the editable props after mount', () => {
       />,
     );
     expect(screen.getByRole('button', {name: 'Bold'})).toBeDisabled();
-  });
-});
-
-describe('tabEscapeHint suppressed from the catalog', () => {
-  it('renders no hint and leaves no dangling id for an empty catalog string', () => {
-    render(
-      <InternationalizationProvider
-        locale="en"
-        overrides={{en: {'@astryx.richTextEditor.tabEscapeHint': ''}}}>
-        <RichTextEditor label="Notes" placeholder="Write…" />
-      </InternationalizationProvider>,
-    );
-    expect(
-      screen.queryByText(
-        'Press Escape then Tab to move focus out of the editor.',
-      ),
-    ).not.toBeInTheDocument();
-    const ids = (
-      screen.getByRole('textbox').getAttribute('aria-describedby') ?? ''
-    )
-      .split(/\s+/)
-      .filter(Boolean);
-    for (const id of ids) {
-      expect(document.getElementById(id), `dangling id: ${id}`).not.toBeNull();
-    }
   });
 });
