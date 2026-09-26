@@ -4,7 +4,7 @@
 
 /**
  * @file Citation.tsx
- * @input Uses React, StyleX, theme tokens
+ * @input Uses React, StyleX, theme tokens, and the shared navigation policy
  * @output Exports Citation component for inline citation references
  * @position Core implementation; consumed by index.ts
  *
@@ -30,6 +30,7 @@ import {
   easeVars,
 } from '../theme/tokens.stylex';
 import {mergeProps} from '../utils';
+import {isSafeUrl} from '../utils/safeUrl';
 import type {BaseProps} from '../BaseProps';
 import {themeProps} from '../utils/themeProps';
 import {useTranslator} from '../i18n';
@@ -99,7 +100,10 @@ const styles = stylex.create({
     minWidth: 0,
   },
   labelInteractive: {
-    cursor: 'pointer',
+    cursor: {
+      default: 'pointer',
+      ':is(:disabled,[aria-disabled="true"])': 'default',
+    },
   },
   labelHover: {
     backgroundColor: {
@@ -137,7 +141,10 @@ const styles = stylex.create({
     transitionTimingFunction: easeVars['--ease-standard'],
   },
   numberInteractive: {
-    cursor: 'pointer',
+    cursor: {
+      default: 'pointer',
+      ':is(:disabled,[aria-disabled="true"])': 'default',
+    },
   },
   numberHover: {
     backgroundColor: {
@@ -183,7 +190,8 @@ export function Citation({
 }: CitationProps): React.ReactElement {
   const t = useTranslator();
   const title = source.title ?? String(number);
-  const href = source.url;
+  const href =
+    source.url != null && isSafeUrl(source.url) ? source.url : undefined;
 
   // Resolve the source icon. A non-string `icon` node renders as-is (an Astryx
   // <Icon>, SVG, avatar, etc.). Otherwise fall back to an image URL: `src`, or

@@ -4,7 +4,7 @@
 
 /**
  * @file BottomSheet.tsx
- * @input Uses React, StyleX, core hooks/utils, BottomSheetPanel, BottomSheetSwitcherContext
+ * @input Uses React, StyleX, core hooks/utils, named BottomSheetPanel, BottomSheetSwitcherContext
  * @output Exports BottomSheet component and BottomSheetProps
  * @position Public BottomSheet router plus private standalone/switcher hosts
  *
@@ -16,6 +16,7 @@
  *
  * SYNC: When modified, update these files to stay in sync:
  * - /packages/core/src/BottomSheet/BottomSheetPanel.tsx
+ * - /packages/core/src/BottomSheet/BottomSheetEdgeTint.tsx
  * - /packages/core/src/BottomSheet/BottomSheet.doc.mjs
  * - /packages/core/src/BottomSheet/BottomSheet.test.tsx
  * - /packages/core/src/BottomSheet/BottomSheetSwitcher.tsx
@@ -31,6 +32,7 @@ import {
   useLayoutEffect,
   useRef,
   useState,
+  type RefObject,
   type ReactNode,
 } from 'react';
 import * as stylex from '@stylexjs/stylex';
@@ -38,11 +40,13 @@ import type {BaseProps} from '../BaseProps';
 import type {DialogPurpose} from '../Dialog';
 import {colorVars, durationVars, easeVars} from '../theme/tokens.stylex';
 import {useDevWarning, useScrollLock} from '../hooks';
+import {isImeKeyEvent} from '../utils';
 import {
   BottomSheetPanel,
   type BottomSheetPanelMotion,
   type BottomSheetPanelState,
 } from './BottomSheetPanel';
+import {BottomSheetEdgeTint} from './BottomSheetEdgeTint';
 import {
   BottomSheetSwitcherContext,
   type BottomSheetSwitcherContextValue,
@@ -91,6 +95,20 @@ const styles = stylex.create({
       '@media (prefers-reduced-motion: reduce)': {
         transitionDuration: '0.01s',
       },
+    },
+  },
+  /**
+   * The dim leaves with the sheet, on a curve that matches.
+   *
+   * A fade covers no distance, so the decelerate token front-loads its
+   * progress and simply ends it early: `--ease-standard` puts the scrim at 90%
+   * faded in 163ms of a 410ms close, leaving an undimmed page under a sheet
+   * that is still sliding across it. `linear` spends the duration it is given.
+   * Same reasoning the touch date picker's surface swap already carries.
+   */
+  scrimClosing: {
+    '::backdrop': {
+      transitionTimingFunction: 'linear',
     },
   },
   positioner: {
@@ -146,6 +164,8 @@ interface StandaloneBottomSheetProps extends BottomSheetSharedProps {
   isOpen: boolean;
   onOpenChange: (isOpen: boolean) => void;
   hasScrim?: boolean;
+  /** Element that receives focus after the sheet closes. */
+  finalFocusRef?: RefObject<HTMLElement | null>;
   sheetId?: never;
 }
 
@@ -205,6 +225,7 @@ function StandaloneBottomSheet({
   height = 'capped',
   snapPoints,
   hasScrim = true,
+  finalFocusRef,
   purpose = 'info',
   xstyle,
   ...props
@@ -282,10 +303,10 @@ function StandaloneBottomSheet({
         dialog.close();
       }
       setIsPresented(false);
-      triggerRef.current?.focus();
+      (finalFocusRef?.current ?? triggerRef.current)?.focus();
       triggerRef.current = null;
     },
-    [isOpen],
+    [finalFocusRef, isOpen],
   );
 
   useScrollLock(shouldPresent && hasScrim);
@@ -298,6 +319,9 @@ function StandaloneBottomSheet({
 
   const handleCancel = useCallback(
     (event: React.SyntheticEvent<HTMLDialogElement>) => {
+      // No IME guard here: `cancel` is a plain Event carrying no composition
+      // state, and handleKeyDown claims a composing Escape before the browser
+      // can raise the close request that would arrive here.
       event.preventDefault();
       dismissOnEscape();
     },
@@ -305,10 +329,20 @@ function StandaloneBottomSheet({
   );
   const handleKeyDown = useCallback(
     (event: React.KeyboardEvent<HTMLDialogElement>) => {
-      if (event.key === 'Escape') {
-        event.preventDefault();
-        dismissOnEscape();
+      if (event.key !== 'Escape') {
+        return;
       }
+      // Claim the key before reading it: an unclaimed Escape lets the browser
+      // raise its own close request, which lands on handleCancel and dismisses
+      // on the same keypress.
+      event.preventDefault();
+      // An IME fires this keydown to cancel an in-progress composition, ahead
+      // of compositionend. It is a composition cancel, not a dismissal command
+      // — see utils/ime; Dialog and BottomSheetSwitcher guard the same way.
+      if (isImeKeyEvent(event.nativeEvent)) {
+        return;
+      }
+      dismissOnEscape();
     },
     [dismissOnEscape],
   );
@@ -327,6 +361,7 @@ function StandaloneBottomSheet({
         styles.dialog,
         shouldPresent && styles.dialogOpen,
         hasScrim && styles.scrim,
+        hasScrim && !isOpen && isPresented && styles.scrimClosing,
         !hasScrim && styles.dialogNonModal,
       )}
       ref={dialogRef}
@@ -344,6 +379,7 @@ function StandaloneBottomSheet({
           ref={ref}
           state={panelState}
           height={height}
+          label={label}
           snapPoints={snapPoints}
           isSwipeDismissAllowed={purpose === 'info'}
           isPageScrollLocked={shouldPresent && hasScrim}
@@ -355,6 +391,7 @@ function StandaloneBottomSheet({
           {children}
         </BottomSheetPanel>
       </div>
+      <BottomSheetEdgeTint />
     </dialog>
   );
 }
@@ -501,6 +538,7 @@ function SwitcherBottomSheetItem({
         ref={ref}
         state={panelState}
         height={height}
+        label={label}
         snapPoints={snapPoints}
         isSwipeDismissAllowed={purpose === 'info'}
         isPageScrollLocked={hasScrim}

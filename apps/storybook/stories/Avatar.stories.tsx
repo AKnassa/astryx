@@ -10,7 +10,7 @@ import {
   spacingVars,
   typographyVars,
 } from '@astryxdesign/core/theme/tokens.stylex';
-import {CheckIcon} from '@heroicons/react/24/solid';
+import {CheckIcon, ClockIcon, XMarkIcon} from '@heroicons/react/24/solid';
 
 const styles = stylex.create({
   storyWrapper: {
@@ -262,6 +262,41 @@ export const WithStatus: Story = {
       </div>
     </div>
   ),
+};
+
+export const StatusLabelSources: Story = {
+  render: () => {
+    // A consumer's own wrapper. AvatarStatusDot reports its label to the
+    // avatar through context, so the status still reaches the accessible name.
+    function PresenceDot({presence}: {presence: string}) {
+      return <AvatarStatusDot variant="success" label={presence} />;
+    }
+
+    return (
+      <div {...stylex.props(styles.storyWrapper)}>
+        <h4 {...stylex.props(styles.heading)}>
+          Every route to a status in the accessible name
+        </h4>
+        <div {...stylex.props(styles.row)}>
+          <Avatar
+            name="Ada Lovelace"
+            size="xl"
+            status={<AvatarStatusDot variant="success" label="Online" />}
+          />
+          <Avatar
+            name="Grace Hopper"
+            size="xl"
+            status={<PresenceDot presence="Online" />}
+          />
+          <Avatar
+            name="Katherine Johnson"
+            size="xl"
+            status={<AvatarStatusDot variant="neutral" label="On leave" />}
+          />
+        </div>
+      </div>
+    );
+  },
 };
 
 export const StatusAcrossAllSizes: Story = {
@@ -608,7 +643,7 @@ export const StatusWithIcon: Story = {
             <AvatarStatusDot
               variant="neutral"
               label="Pending"
-              icon={<CheckIcon />}
+              icon={<ClockIcon />}
             />
           }
         />
@@ -620,7 +655,7 @@ export const StatusWithIcon: Story = {
             <AvatarStatusDot
               variant="error"
               label="Rejected"
-              icon={<CheckIcon />}
+              icon={<XMarkIcon />}
             />
           }
         />

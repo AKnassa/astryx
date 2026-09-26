@@ -240,7 +240,6 @@ export {
 
 // Chart v2 (config model) moved to its own package: @astryxdesign/charts.
 // It is no longer re-exported from @astryxdesign/lab.
-export * from './Stepper';
 export * from './CircularProgress';
 
 // ListInput — compact editor for short collections of simple records
@@ -253,6 +252,15 @@ export {
   type LogEntry,
   type LogStreamLevel,
 } from './LogStream';
+
+// MobileTokenizer — Lab prototype (stack layer 1) of the touch Tokenizer
+// flow: summary trigger + stacked manage/add BottomSheets. Graduates to
+// Core Tokenizer presentation="bottom-sheet" (stack layer 2).
+export {
+  MobileTokenizer,
+  type MobileTokenizerProps,
+  type MobileTokenizerChange,
+} from './MobileTokenizer';
 
 // RichTextEditor (RFC facebook/astryx#3899) has graduated out of @astryxdesign/lab
 // into its own canary-only package, @astryxdesign/richtext, so it can be canaried

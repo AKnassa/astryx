@@ -1935,9 +1935,10 @@ describe('read-only keyboard traversal (WCAG 2.1.2)', () => {
 });
 
 describe('toolbar follows the editable props after mount', () => {
-  // Lexical freezes initialConfig.editable at composer init, so without the
-  // editor.setEditable sync the toolbar would stay stuck at its mount state
-  // while the wrapper styling and ARIA followed the props.
+  // The extension's `editable` is only applied when the composer builds the
+  // editor, so without the editor.setEditable sync the toolbar would stay
+  // stuck at its mount state while the wrapper styling and ARIA followed the
+  // props.
   it('re-enables and re-disables the formatting controls on rerender', () => {
     const {rerender} = render(
       <RichTextEditor

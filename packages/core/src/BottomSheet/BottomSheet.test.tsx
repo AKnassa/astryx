@@ -3,7 +3,7 @@
 /**
  * @file BottomSheet.test.tsx
  * @input Uses vitest, @testing-library/react, BottomSheet component
- * @output Unit tests for BottomSheet component behavior
+ * @output Unit tests for BottomSheet behavior and observed content anatomy
  * @position Core testing; validates BottomSheet.tsx implementation
  *
  * SYNC: When BottomSheet.tsx changes, update tests to match new behavior
@@ -290,7 +290,7 @@ describe('BottomSheet', () => {
     expect(onClick).toHaveBeenCalledTimes(1);
   });
 
-  it('keeps consumer content as the last scroll-body child', () => {
+  it('keeps consumer content first and last inside the observed content box', () => {
     render(
       <BottomSheet isOpen onOpenChange={() => {}} label="Filters">
         <div data-testid="consumer-content">Sheet content</div>
@@ -300,7 +300,10 @@ describe('BottomSheet', () => {
     const consumer = screen.getByTestId('consumer-content');
 
     expect(body.children).toHaveLength(1);
-    expect(body.lastElementChild).toBe(consumer);
+    const content = body.lastElementChild;
+    expect(content).toHaveAttribute('data-scroll-content');
+    expect(content?.lastElementChild).toBe(consumer);
+    expect(consumer.matches(':first-child')).toBe(true);
     expect(consumer.matches(':last-child')).toBe(true);
   });
 
@@ -332,6 +335,106 @@ describe('BottomSheet', () => {
     );
     fireEvent.keyDown(screen.getByRole('dialog'), {key: 'Escape'});
     expect(onOpenChange).toHaveBeenCalledWith(false);
+  });
+
+  it('ignores Escape while an IME composition is active', () => {
+    const onOpenChange = vi.fn();
+    render(
+      <BottomSheet isOpen onOpenChange={onOpenChange} label="Filters">
+        <input aria-label="Search" />
+      </BottomSheet>,
+    );
+    const dialog = screen.getByRole('dialog');
+
+    fireEvent.keyDown(dialog, {key: 'Escape', isComposing: true});
+    fireEvent.keyDown(dialog, {key: 'Escape', keyCode: 229});
+
+    expect(onOpenChange).not.toHaveBeenCalled();
+  });
+
+  it('claims the composing Escape so no native close request follows', () => {
+    const onOpenChange = vi.fn();
+    render(
+      <BottomSheet isOpen onOpenChange={onOpenChange} label="Filters">
+        <input aria-label="Search" />
+      </BottomSheet>,
+    );
+    const dialog = screen.getByRole('dialog');
+
+    // An unclaimed Escape lets the browser raise its own close request, which
+    // arrives as `cancel` and dismisses the sheet on the same keypress. The
+    // guard has to swallow the composing Escape, not merely skip dismissal.
+    const wasNotClaimed = fireEvent.keyDown(dialog, {
+      key: 'Escape',
+      isComposing: true,
+    });
+
+    expect(wasNotClaimed).toBe(false);
+    expect(onOpenChange).not.toHaveBeenCalled();
+  });
+
+  it('keeps a form sheet open when Escape cancels a field composition', () => {
+    const onOpenChange = vi.fn();
+    render(
+      <BottomSheet
+        isOpen
+        purpose="form"
+        onOpenChange={onOpenChange}
+        label="Edit profile">
+        <input aria-label="Name" />
+      </BottomSheet>,
+    );
+
+    // The reported path: the keydown starts at the composing field and bubbles
+    // to the sheet's <dialog>, so the guard has to survive the trip.
+    fireEvent.keyDown(screen.getByRole('textbox', {name: 'Name'}), {
+      key: 'Escape',
+      isComposing: true,
+    });
+
+    expect(onOpenChange).not.toHaveBeenCalled();
+  });
+
+  it('still dismisses on the Escape after a composition is cancelled', () => {
+    const onOpenChange = vi.fn();
+    render(
+      <BottomSheet isOpen onOpenChange={onOpenChange} label="Filters">
+        <input aria-label="Search" />
+      </BottomSheet>,
+    );
+    const dialog = screen.getByRole('dialog');
+
+    fireEvent.keyDown(dialog, {key: 'Escape', isComposing: true});
+    expect(onOpenChange).not.toHaveBeenCalled();
+
+    fireEvent.keyDown(dialog, {key: 'Escape'});
+
+    expect(onOpenChange).toHaveBeenCalledWith(false);
+  });
+
+  it('leaves the IME the composition keys that are not Escape', () => {
+    const onOpenChange = vi.fn();
+    render(
+      <BottomSheet isOpen onOpenChange={onOpenChange} label="Filters">
+        <input aria-label="Search" />
+      </BottomSheet>,
+    );
+    const dialog = screen.getByRole('dialog');
+
+    // Enter commits a candidate and the arrows walk the candidate window. The
+    // sheet must claim neither, or the IME loses keys it owns.
+    const enterUnclaimed = fireEvent.keyDown(dialog, {
+      key: 'Enter',
+      isComposing: true,
+    });
+    const arrowUnclaimed = fireEvent.keyDown(dialog, {
+      key: 'ArrowDown',
+      isComposing: true,
+    });
+
+    expect(enterUnclaimed).toBe(true);
+    expect(arrowUnclaimed).toBe(true);
+    expect(onOpenChange).not.toHaveBeenCalled();
   });
 
   it('requests close when the scrim (dialog element itself) is clicked', () => {
@@ -472,6 +575,29 @@ describe('BottomSheet', () => {
       );
       fireEvent.keyDown(screen.getByRole('dialog'), {key: 'Escape'});
       expect(onOpenChange).toHaveBeenCalledWith(false);
+    });
+
+    it('ignores Escape while an IME composition is active', () => {
+      const onOpenChange = vi.fn();
+      render(
+        <BottomSheet
+          isOpen
+          hasScrim={false}
+          onOpenChange={onOpenChange}
+          label="Filters">
+          <input aria-label="Search" />
+        </BottomSheet>,
+      );
+
+      // Escape is this sheet's only keyboard route out — there is no native
+      // close request behind it — so the guard is all that stands between a
+      // composing CJK user and a dismissed sheet.
+      fireEvent.keyDown(screen.getByRole('dialog'), {
+        key: 'Escape',
+        isComposing: true,
+      });
+
+      expect(onOpenChange).not.toHaveBeenCalled();
     });
 
     it('still dismisses on a downward swipe past the threshold', () => {
@@ -2195,6 +2321,35 @@ describe('BottomSheet', () => {
       finishSheetExit();
 
       expect(document.activeElement).toBe(opener);
+    });
+
+    it('prefers an explicit final focus target', () => {
+      const finalFocusRef = createRef<HTMLButtonElement>();
+      function ExplicitFocusHarness() {
+        const [isOpen, setIsOpen] = useState(true);
+        return (
+          <>
+            <button ref={finalFocusRef} type="button">
+              Adaptive trigger
+            </button>
+            <BottomSheet
+              isOpen={isOpen}
+              onOpenChange={setIsOpen}
+              finalFocusRef={finalFocusRef}
+              label="Filters">
+              <button type="button" onClick={() => setIsOpen(false)}>
+                Done
+              </button>
+            </BottomSheet>
+          </>
+        );
+      }
+
+      render(<ExplicitFocusHarness />);
+      fireEvent.click(screen.getByRole('button', {name: 'Done'}));
+      finishSheetExit();
+
+      expect(document.activeElement).toBe(finalFocusRef.current);
     });
   });
 

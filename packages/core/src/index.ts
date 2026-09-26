@@ -43,6 +43,7 @@ export * from './CheckboxList';
 export * from './Collapsible';
 export * from './RadioList';
 export * from './Resizable';
+export * from './ScrollableArea';
 export * from './Divider';
 export * from './VisuallyHidden';
 export * from './EmptyState';
@@ -55,6 +56,7 @@ export * from './NavIcon';
 export * from './NavMenu';
 export * from './Slider';
 export * from './Stack';
+export * from './Stepper';
 export * from './Switch';
 export * from './DateInput';
 export * from './DateTimeInput';
@@ -134,6 +136,8 @@ export type {
   ToastOptions,
   ToastDismissFn,
   ShowToastFn,
+  ToastContentRenderProps,
+  ToastContentRenderFn,
 } from './Toast';
 
 // Popover component and hook
@@ -156,6 +160,9 @@ export * from './Spinner';
 
 // Timestamp display
 export * from './Timestamp';
+
+// Elapsed timer display
+export * from './Timer';
 
 // Overlay
 export * from './Overlay';
