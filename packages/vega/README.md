@@ -28,13 +28,15 @@ Renders [Vega](https://vega.github.io/vega/) and [Vega-Lite](https://vega.github
 Vega is published **only** under the `@canary` dist-tag, so you must request that tag explicitly. There is no `latest` version to install yet.
 
 ```bash
-npm install @astryxdesign/vega@canary @astryxdesign/core vega vega-lite
+npm install @astryxdesign/vega@canary @astryxdesign/charts@canary @astryxdesign/core@canary vega vega-lite
 ```
 
-`@astryxdesign/charts` comes along as a direct dependency — it owns the shared
-data-visualization palette that keeps Vega charts and the compositional charts
-looking identical. `@astryxdesign/core` is a peer dependency: the wrapper reads
-the active `<Theme>` from it to resolve tokens to concrete values.
+`@astryxdesign/charts` and `@astryxdesign/core` are peer dependencies, so your
+app shares one copy of each: charts owns the shared data-visualization palette
+that keeps Vega charts and the compositional charts looking identical, and the
+wrapper reads the active `<Theme>` from core to resolve tokens to concrete
+values. A canary pins both peers to its own build, so install them from the
+same `@canary` tag.
 
 > Canary builds track the latest commit on `main` (`0.x.y-canary.<sha>`). They can break between any two versions — pin an exact version if you need stability.
 
