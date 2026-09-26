@@ -1962,6 +1962,36 @@ describe('editable state follows prop changes', () => {
     // state-derived aria-readonly with undefined.
     expect(textbox).toHaveAttribute('aria-readonly', 'true');
   });
+
+  it('keeps a plugin that disables editing during mount in charge', () => {
+    // The prop sync renders after `plugins`, so its mount effect runs after
+    // theirs; it must only react to prop changes, never re-assert the mount
+    // value over a plugin that already locked the editor.
+    function DisableOnMount() {
+      const [editor] = useLexicalComposerContext();
+      useEffect(() => {
+        editor.setEditable(false);
+      }, [editor]);
+      return null;
+    }
+    let captured: LexicalEditor | null = null;
+    render(
+      <RichTextEditor
+        label="Notes"
+        plugins={
+          <>
+            <DisableOnMount />
+            <CaptureEditor onReady={editor => (captured = editor)} />
+          </>
+        }
+      />,
+    );
+    expect((captured as unknown as LexicalEditor).isEditable()).toBe(false);
+    expect(screen.getByRole('textbox')).toHaveAttribute(
+      'contenteditable',
+      'false',
+    );
+  });
 });
 
 describe('isReadOnly + isDisabled combined', () => {

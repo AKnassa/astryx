@@ -832,8 +832,16 @@ function EditorRefBridge({
   // `initialConfig.editable` is only read once, on composer init — a later
   // isReadOnly/isDisabled prop change would otherwise leave contenteditable
   // frozen at its mount value while the wrapper styling and ARIA follow the
-  // props. Keep the actual Lexical editable state in sync.
+  // props. Keep the actual Lexical editable state in sync, but only on a prop
+  // change: the mount value is already applied, and this bridge renders after
+  // `plugins`, so re-asserting it would undo a plugin that set editability
+  // during its own mount.
+  const syncedEditableRef = useRef(editable);
   useEffect(() => {
+    if (syncedEditableRef.current === editable) {
+      return;
+    }
+    syncedEditableRef.current = editable;
     editor.setEditable(editable);
   }, [editor, editable]);
 
