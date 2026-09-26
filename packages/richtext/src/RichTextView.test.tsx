@@ -2,7 +2,8 @@
 
 /**
  * @file RichTextView.test.tsx
- * @input Uses vitest, @testing-library/react, RichTextView
+ * @input Uses vitest (with core's warnOnce mocked), @testing-library/react,
+ *   RichTextView
  * @output Unit tests for the read-only view's accessible name (including
  *   label changes after mount and the blank-label guard), keyboard
  *   reachability, className/xstyle merging and rest props on the root element,
@@ -13,12 +14,21 @@
  * SYNC: When the view component changes, update these tests to match.
  */
 
-import {describe, it, expect, vi, beforeEach, afterEach} from 'vitest';
+import {describe, it, expect, vi, beforeEach} from 'vitest';
 import {render, screen, waitFor} from '@testing-library/react';
 import {createRef} from 'react';
 import * as stylex from '@stylexjs/stylex';
-import {__resetDevWarnings} from '@astryxdesign/core/utils';
+import {warnOnce} from '@astryxdesign/core/utils';
+import type * as CoreUtils from '@astryxdesign/core/utils';
 import {RichTextView} from './RichTextView';
+
+// warnOnce dedupes per key for the process lifetime, so the label guard is
+// asserted on the call itself rather than on console output an earlier test
+// may already have consumed.
+vi.mock('@astryxdesign/core/utils', async importOriginal => ({
+  ...(await importOriginal<typeof CoreUtils>()),
+  warnOnce: vi.fn(),
+}));
 
 // A minimal valid serialized Lexical editor state containing a single
 // paragraph with the given text.
@@ -225,13 +235,7 @@ describe('RichTextView root ref', () => {
 
 describe('RichTextView label guard', () => {
   beforeEach(() => {
-    // warnOnce dedupes per key for the process lifetime, so every test that
-    // asserts on the warning has to start from a clean slate.
-    __resetDevWarnings();
-  });
-
-  afterEach(() => {
-    vi.restoreAllMocks();
+    vi.mocked(warnOnce).mockClear();
   });
 
   it.each([
@@ -239,7 +243,6 @@ describe('RichTextView label guard', () => {
     ['an empty string', ''],
     ['whitespace only', '   '],
   ])('warns and emits no aria-label when the label is %s', async (_, label) => {
-    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
     render(<RichTextView value={HELLO_STATE} label={label} />);
     await waitFor(() =>
       expect(screen.getByText('Hello world')).toBeInTheDocument(),
@@ -248,18 +251,23 @@ describe('RichTextView label guard', () => {
     // A blank label names nothing — `aria-label=""` resolves to the same
     // empty accessible name as no attribute at all — so it must not be able
     // to silence the guard the prop exists to enforce.
-    expect(warn).toHaveBeenCalledWith(expect.stringContaining('RichTextView:'));
+    expect(warnOnce).toHaveBeenCalledWith(
+      'richtext:view-needs-label',
+      'RichTextView',
+      expect.any(String),
+    );
     expect(screen.getByRole('textbox')).not.toHaveAttribute('aria-label');
   });
 
   it('stays silent when a real label is supplied', async () => {
-    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
     render(<RichTextView value={HELLO_STATE} label="Meeting notes" />);
     await waitFor(() =>
       expect(screen.getByText('Hello world')).toBeInTheDocument(),
     );
-    expect(warn).not.toHaveBeenCalledWith(
-      expect.stringContaining('RichTextView:'),
+    expect(warnOnce).not.toHaveBeenCalledWith(
+      'richtext:view-needs-label',
+      expect.anything(),
+      expect.anything(),
     );
     expect(screen.getByRole('textbox')).toHaveAttribute(
       'aria-label',
