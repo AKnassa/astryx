@@ -103,7 +103,11 @@ describe('RichTextView accessibility', () => {
 describe('RichTextView root element merging', () => {
   it('merges a consumer className with the view styling instead of clobbering it', async () => {
     const {container} = render(
-      <RichTextView value={HELLO_STATE} className="consumer-class" />,
+      <RichTextView
+        label="Notes"
+        value={HELLO_STATE}
+        className="consumer-class"
+      />,
     );
     await waitFor(() =>
       expect(screen.getByText('Hello world')).toBeInTheDocument(),
@@ -118,6 +122,7 @@ describe('RichTextView root element merging', () => {
   it('merges a consumer className in the error-fallback branch too', () => {
     render(
       <RichTextView
+        label="Notes"
         value={'{ not valid json'}
         className="consumer-class"
         errorFallback={<div data-testid="view-fallback" />}
@@ -149,6 +154,7 @@ describe('RichTextView root element merging', () => {
 
     const {container} = render(
       <RichTextView
+        label="Notes"
         value={HELLO_STATE}
         className="consumer-class"
         xstyle={localStyles.custom}
@@ -238,8 +244,21 @@ describe('RichTextView label guard', () => {
     vi.mocked(warnOnce).mockClear();
   });
 
+  it('requires a label at compile time, and still warns when JS omits it', async () => {
+    // @ts-expect-error `label` is required: the view renders a role="textbox"
+    render(<RichTextView value={HELLO_STATE} />);
+    await waitFor(() =>
+      expect(screen.getByText('Hello world')).toBeInTheDocument(),
+    );
+    expect(warnOnce).toHaveBeenCalledWith(
+      'richtext:view-needs-label',
+      'RichTextView',
+      expect.any(String),
+    );
+    expect(screen.getByRole('textbox')).not.toHaveAttribute('aria-label');
+  });
+
   it.each([
-    ['omitted', undefined],
     ['an empty string', ''],
     ['whitespace only', '   '],
   ])('warns and emits no aria-label when the label is %s', async (_, label) => {

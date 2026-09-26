@@ -67,14 +67,14 @@ export interface RichTextViewProps extends BaseProps {
    */
   value: string;
   /**
-   * Accessible name for the read-only text surface. The view renders a
-   * `role="textbox"` element, and a textbox without a name fails
+   * Accessible name for the read-only text surface. Required: the view
+   * renders a `role="textbox"` element, and a textbox without a name fails
    * axe's `aria-input-field-name`; pass a label describing the content
-   * (e.g. "Meeting notes"). A blank or whitespace-only string is treated
-   * exactly like omitting the prop — it names nothing, so no `aria-label`
-   * is emitted and the dev warning still fires.
+   * (e.g. "Meeting notes"). A blank or whitespace-only string names nothing,
+   * so no `aria-label` is emitted and the dev warning fires — the same as a
+   * JavaScript caller omitting the prop.
    */
-  label?: string;
+  label: string;
   /**
    * Additional Lexical nodes to register beyond the default OSS set. Must match
    * the nodes used to author `value` so custom node types deserialize.
@@ -111,10 +111,11 @@ export interface RichTextViewProps extends BaseProps {
  * Keeps the rendered content in sync with the `value` prop after mount.
  *
  * `LexicalComposer`'s `initialConfig.editorState` is only read once on mount, so
- * a plain `<RichTextView value={changingValue} />` would freeze at its first
- * value — the content would never update when `value` changed. This plugin runs
- * inside the composer context and re-applies `value` whenever it changes, so the
- * read-only view stays reactive (e.g. previewing content edited elsewhere).
+ * a plain `<RichTextView label="Preview" value={changingValue} />` would freeze
+ * at its first value — the content would never update when `value` changed.
+ * This plugin runs inside the composer context and re-applies `value` whenever
+ * it changes, so the read-only view stays reactive (e.g. previewing content
+ * edited elsewhere).
  *
  * The initial `value` is already applied via `initialConfig.editorState`, so we
  * skip the first run to avoid a redundant re-parse on mount.
@@ -155,7 +156,7 @@ function SyncValuePlugin({value}: {value: string}): null {
  * @example
  * ```
  * import {RichTextView} from '@astryxdesign/richtext';
- * <RichTextView value={storedEditorStateJSON} />
+ * <RichTextView label="Meeting notes" value={storedEditorStateJSON} />
  * ```
  */
 /**

@@ -185,7 +185,7 @@ export const docs = {
       {
         guidance: true,
         description:
-          'Persist content by serializing editorState.toJSON() in onChange; rehydrate via defaultValue / RichTextView value. Always pass RichTextView a label — it renders a keyboard-reachable role="textbox" surface, and without an accessible name it fails axe aria-input-field-name (the component dev-warns when label is omitted or blank).',
+          'Persist content by serializing editorState.toJSON() in onChange; rehydrate via defaultValue / RichTextView value. RichTextView requires a non-blank label — it renders a keyboard-reachable role="textbox" surface, and without an accessible name it fails axe aria-input-field-name (a blank label emits no aria-label and dev-warns).',
       },
       {
         guidance: true,

@@ -964,7 +964,7 @@ describe('RichTextEditor Tab keyboard trap escape (WCAG 2.1.2)', () => {
 
 describe('RichTextView', () => {
   it('renders serialized content read-only', async () => {
-    render(<RichTextView value={HELLO_STATE} />);
+    render(<RichTextView label="Notes" value={HELLO_STATE} />);
     await waitFor(() =>
       expect(screen.getByText('Hello world')).toBeInTheDocument(),
     );
@@ -977,6 +977,7 @@ describe('RichTextView', () => {
   it('renders custom read-only plugins passed via the plugins prop', () => {
     render(
       <RichTextView
+        label="Notes"
         value={HELLO_STATE}
         plugins={<div data-testid="view-plugin" />}
       />,
@@ -985,7 +986,13 @@ describe('RichTextView', () => {
   });
 
   it('accepts a custom namespace without throwing', async () => {
-    render(<RichTextView value={HELLO_STATE} namespace="custom-view-ns" />);
+    render(
+      <RichTextView
+        label="Notes"
+        value={HELLO_STATE}
+        namespace="custom-view-ns"
+      />,
+    );
     await waitFor(() =>
       expect(screen.getByText('Hello world')).toBeInTheDocument(),
     );
@@ -994,7 +1001,9 @@ describe('RichTextView', () => {
   it('registers extra nodes via the nodes prop without throwing', async () => {
     // Passing the default node set again is a no-op but exercises the merge
     // path; the point is that supplying `nodes` does not break rendering.
-    render(<RichTextView value={HELLO_STATE} nodes={[HeadingNode]} />);
+    render(
+      <RichTextView label="Notes" value={HELLO_STATE} nodes={[HeadingNode]} />,
+    );
     await waitFor(() =>
       expect(screen.getByText('Hello world')).toBeInTheDocument(),
     );
@@ -1005,6 +1014,7 @@ describe('RichTextView', () => {
     expect(() =>
       render(
         <RichTextView
+          label="Notes"
           value={'{ not valid json'}
           onParseError={onError}
           errorFallback={<div data-testid="view-fallback">Unavailable</div>}
@@ -1020,7 +1030,7 @@ describe('RichTextView', () => {
 
   it('renders bullet lists with a disc marker (not bare indentation)', async () => {
     const {container} = render(
-      <RichTextView value={makeListState('bullet')} />,
+      <RichTextView label="Notes" value={makeListState('bullet')} />,
     );
     await waitFor(() =>
       expect(screen.getByText('Item one')).toBeInTheDocument(),
@@ -1036,7 +1046,7 @@ describe('RichTextView', () => {
 
   it('renders numbered lists with a decimal marker (not bare indentation)', async () => {
     const {container} = render(
-      <RichTextView value={makeListState('number')} />,
+      <RichTextView label="Notes" value={makeListState('number')} />,
     );
     await waitFor(() =>
       expect(screen.getByText('Item one')).toBeInTheDocument(),
@@ -1049,7 +1059,7 @@ describe('RichTextView', () => {
 
   it('renders nested bullet lists with a distinct depth-2 marker (circle)', async () => {
     const {container} = render(
-      <RichTextView value={makeNestedBulletState()} />,
+      <RichTextView label="Notes" value={makeNestedBulletState()} />,
     );
     await waitFor(() =>
       expect(screen.getByText('Nested item')).toBeInTheDocument(),
@@ -1065,7 +1075,9 @@ describe('RichTextView', () => {
   });
 
   it('renders nothing (no crash) on malformed JSON with no fallback', () => {
-    expect(() => render(<RichTextView value={'garbage'} />)).not.toThrow();
+    expect(() =>
+      render(<RichTextView label="Notes" value={'garbage'} />),
+    ).not.toThrow();
     expect(screen.queryByRole('textbox')).not.toBeInTheDocument();
   });
 
@@ -1076,13 +1088,21 @@ describe('RichTextView', () => {
     // exact bug in the "Markdown Serializers" story (RichTextView stayed stale
     // while the Markdown input changed).
     const {rerender} = render(
-      <RichTextView value={makeParagraphState('first version')} />,
+      <RichTextView
+        label="Notes"
+        value={makeParagraphState('first version')}
+      />,
     );
     await waitFor(() =>
       expect(screen.getByText('first version')).toBeInTheDocument(),
     );
 
-    rerender(<RichTextView value={makeParagraphState('second version')} />);
+    rerender(
+      <RichTextView
+        label="Notes"
+        value={makeParagraphState('second version')}
+      />,
+    );
     await waitFor(() =>
       expect(screen.getByText('second version')).toBeInTheDocument(),
     );
@@ -1094,13 +1114,16 @@ describe('RichTextView', () => {
     // the composer and render the new content (hasError resets on change).
     const {rerender} = render(
       <RichTextView
+        label="Notes"
         value={'{ not valid json'}
         errorFallback={<div data-testid="view-fallback">Unavailable</div>}
       />,
     );
     expect(screen.getByTestId('view-fallback')).toBeInTheDocument();
 
-    rerender(<RichTextView value={makeParagraphState('recovered')} />);
+    rerender(
+      <RichTextView label="Notes" value={makeParagraphState('recovered')} />,
+    );
     await waitFor(() =>
       expect(screen.getByText('recovered')).toBeInTheDocument(),
     );
