@@ -1666,6 +1666,60 @@ describe('Tokenizer', () => {
       rerender(renderGrouped());
       expect(ref).not.toHaveBeenCalled();
     });
+
+    it('keeps end controls outside the scrolling token row in a group', () => {
+      render(
+        <InputGroup label="Recipients">
+          <InputGroupText>To</InputGroupText>
+          <Tokenizer
+            label="People"
+            isLabelHidden
+            searchSource={userSource}
+            value={[users[0], users[1]]}
+            onChange={() => {}}
+            hasClear
+            endContent={<span>2 selected</span>}
+          />
+        </InputGroup>,
+      );
+
+      const row = screen.getByRole('group', {name: 'People'});
+      const input = screen.getByRole('combobox', {name: 'Recipients People'});
+      const clearButton = screen.getByRole('button', {name: 'Clear all'});
+      const track = input.parentElement as HTMLElement;
+
+      // Tokens and the input share one track inside the row: the part that
+      // scrolls. jsdom has no layout, so the rendered half of this contract is
+      // the play function of the WithTokenizerOverflowEndControls story.
+      expect(track.parentElement).toBe(row);
+      const tokens = row.querySelectorAll<HTMLElement>('.astryx-token');
+      expect(tokens).toHaveLength(2);
+      for (const token of tokens) {
+        expect(track).toContainElement(token);
+      }
+
+      // The end controls are the track's siblings, so they can neither scroll
+      // with the tokens nor sit over them.
+      expect(row).toContainElement(clearButton);
+      expect(track).not.toContainElement(clearButton);
+      expect(track).not.toContainElement(screen.getByText('2 selected'));
+    });
+
+    it('keeps tokens and the input as direct children of the field outside a group', () => {
+      render(
+        <Tokenizer
+          label="People"
+          searchSource={userSource}
+          value={[users[0]]}
+          onChange={() => {}}
+          hasClear
+        />,
+      );
+
+      const row = screen.getByRole('group', {name: 'People'});
+      expect(screen.getByRole('combobox').parentElement).toBe(row);
+      expect(document.querySelector('.astryx-token')?.parentElement).toBe(row);
+    });
   });
 });
 

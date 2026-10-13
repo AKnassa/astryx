@@ -14,6 +14,7 @@ import type {SearchableItem, SearchSource} from '@astryxdesign/core/Typeahead';
 import {Tokenizer} from '@astryxdesign/core/Tokenizer';
 import {Selector} from '@astryxdesign/core/Selector';
 import {MultiSelector} from '@astryxdesign/core/MultiSelector';
+import {Badge} from '@astryxdesign/core/Badge';
 import {Icon} from '@astryxdesign/core/Icon';
 import type {ISOTimeString} from '@astryxdesign/core';
 
@@ -232,6 +233,159 @@ export const WithTokenizerOverflow: Story = {
       </div>
     );
   },
+};
+
+/**
+ * End controls hold the row's inline end while a grouped Tokenizer's tokens
+ * overflow: the tokens scroll beside the clear button and `endContent`, never
+ * underneath them, and the controls do not move with the scroll.
+ */
+export const WithTokenizerOverflowEndControls: Story = {
+  render: () => {
+    const [value, setValue] = useState<SearchableItem[]>(fruits.slice(0, 6));
+    return (
+      <div
+        style={{
+          display: 'flex',
+          flexDirection: 'column',
+          width: '320px',
+        }}>
+        <InputGroup label="Favorite fruits">
+          <InputGroupText>Tags</InputGroupText>
+          <Tokenizer
+            label="Selections"
+            isLabelHidden
+            searchSource={fruitSource}
+            value={value}
+            onChange={setValue}
+            placeholder="Add fruits..."
+            hasClear
+            endContent={<Badge label={String(value.length)} />}
+          />
+        </InputGroup>
+      </div>
+    );
+  },
+  play: async ({canvasElement}) => {
+    const row = canvasElement.querySelector<HTMLElement>('.astryx-tokenizer');
+    const input = row?.querySelector<HTMLInputElement>('[role="combobox"]');
+    const endContent = row?.querySelector<HTMLElement>('.astryx-badge');
+    const clearButton = row?.querySelector<HTMLButtonElement>(
+      'button[aria-label="Clear all"]',
+    );
+    const tokens = Array.from(
+      row?.querySelectorAll<HTMLElement>('.astryx-token') ?? [],
+    );
+    if (!row || !input || !endContent || !clearButton || tokens.length < 2) {
+      throw new Error(
+        'Grouped end-controls fixture did not render as expected',
+      );
+    }
+
+    const nextFrame = () =>
+      new Promise<void>(resolve => requestAnimationFrame(() => resolve()));
+    await document.fonts.ready;
+    await nextFrame();
+    await nextFrame();
+
+    // Fail closed if the fixture stops overflowing: without a scrolling token
+    // row every check below would pass vacuously.
+    const scroller = [row, ...row.querySelectorAll<HTMLElement>('*')].find(
+      element => {
+        const {overflowX} = getComputedStyle(element);
+        return (
+          (overflowX === 'auto' || overflowX === 'scroll') &&
+          element.scrollWidth > element.clientWidth
+        );
+      },
+    );
+    if (!scroller) {
+      throw new Error(
+        'Fixture no longer overflows: the grouped token row does not scroll',
+      );
+    }
+
+    const endControlsRect = () => {
+      const content = endContent.getBoundingClientRect();
+      const clear = clearButton.getBoundingClientRect();
+      return {
+        left: Math.min(content.left, clear.left),
+        right: Math.max(content.right, clear.right),
+      };
+    };
+    const assertClearOfEndControls = (position: string) => {
+      const end = endControlsRect();
+      const clip = scroller.getBoundingClientRect();
+      for (const element of [...tokens, input]) {
+        const rect = element.getBoundingClientRect();
+        // Only the part the scrolling row leaves visible can paint or be hit.
+        const left = Math.max(rect.left, clip.left);
+        const right = Math.min(rect.right, clip.right);
+        const overlap = Math.min(right, end.right) - Math.max(left, end.left);
+        if (right > left && overlap > 0.5) {
+          const name =
+            element === input
+              ? 'The combobox'
+              : `Token "${element.textContent}"`;
+          throw new Error(
+            `${name} sits under the end controls by ${overlap.toFixed(2)}px at the ${position} of the scroll`,
+          );
+        }
+      }
+      const clearRect = clearButton.getBoundingClientRect();
+      const hit = document.elementFromPoint(
+        clearRect.left + clearRect.width / 2,
+        clearRect.top + clearRect.height / 2,
+      );
+      if (!hit || !clearButton.contains(hit)) {
+        throw new Error(
+          `Clear all center is hit-tested as ${hit?.tagName ?? 'nothing'} at the ${position} of the scroll`,
+        );
+      }
+    };
+
+    const tokenTops = tokens.map(token => token.getBoundingClientRect().top);
+    if (Math.max(...tokenTops) - Math.min(...tokenTops) > 0.5) {
+      throw new Error('Grouped tokens wrapped onto a second row');
+    }
+
+    assertClearOfEndControls('start');
+    const endAtStart = endControlsRect();
+
+    const isRTL = getComputedStyle(scroller).direction === 'rtl';
+    scroller.scrollLeft = (isRTL ? -1 : 1) * scroller.scrollWidth;
+    await nextFrame();
+    if (scroller.scrollLeft === 0) {
+      throw new Error('The grouped token row did not scroll');
+    }
+
+    const endAtEnd = endControlsRect();
+    const shift = Math.max(
+      Math.abs(endAtEnd.left - endAtStart.left),
+      Math.abs(endAtEnd.right - endAtStart.right),
+    );
+    if (shift > 0.5) {
+      throw new Error(
+        `End controls moved ${shift.toFixed(2)}px when the token row scrolled`,
+      );
+    }
+    assertClearOfEndControls('end');
+
+    // Leave the row at rest, so that is the frame a screenshot keeps.
+    scroller.scrollLeft = 0;
+  },
+};
+
+export const WithTokenizerOverflowEndControlsRTL: Story = {
+  ...WithTokenizerOverflowEndControls,
+  decorators: [
+    Story => (
+      <div dir="rtl">
+        <Story />
+      </div>
+    ),
+  ],
+  name: 'With Tokenizer Overflow End Controls (RTL)',
 };
 
 export const WithNumberInput: Story = {
