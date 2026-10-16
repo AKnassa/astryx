@@ -236,6 +236,11 @@ const RENDER_TRIGGER_PARTS_MESSAGE =
   '`container*` and `control*` styling props have no effect with `renderTrigger`: ' +
   'no Field box or control box renders. Style the control you render instead.';
 
+const RENDER_TRIGGER_DISABLED_MESSAGE =
+  '`disabledMessage` has no effect with `renderTrigger`: the caller owns the ' +
+  'control, so no reason tooltip renders. Explain the disabled state on the ' +
+  'control you render instead.';
+
 /**
  * Props the `renderTrigger` render prop hands to the control the caller
  * renders.
@@ -320,6 +325,8 @@ export interface ComplexSelectorProps<Value> extends Omit<
    * Click handler on the trigger. It runs before the popup opens; call
    * `preventDefault()` to keep the popup closed. A press elsewhere in the
    * control box goes through the trigger, so it reaches this handler too.
+   * While disabled with a `disabledMessage`, the trigger stays focusable, so
+   * this handler still runs on a press; opening stays blocked.
    * With `renderTrigger` it lands on the caller's control and runs after the
    * built-in toggle, which it cannot cancel.
    */
@@ -363,8 +370,9 @@ export interface ComplexSelectorProps<Value> extends Omit<
    * `isDisabled`, the selector shows a tooltip with this text on hover and
    * keyboard focus, and the trigger stays focusable (via `aria-disabled`)
    * so the reason is discoverable by keyboard and assistive technology.
-   * Activation stays blocked. Has no effect with `renderTrigger`, where the
-   * caller owns the control.
+   * Activation stays blocked, but a caller `onClick` still runs on a press.
+   * Has no effect with `renderTrigger`, where the caller owns the control; a
+   * development warning says so.
    *
    * Use this instead of wrapping a disabled selector in `Tooltip` — disabled
    * controls don't emit the pointer events an external tooltip needs.
@@ -541,6 +549,11 @@ export function ComplexSelector<Value>({
         controlXstyle != null ||
         controlClassName != null ||
         controlStyle != null),
+  );
+  useDevWarning(
+    'ComplexSelector',
+    RENDER_TRIGGER_DISABLED_MESSAGE,
+    renderTrigger != null && disabledMessage != null,
   );
   const t = useTranslator();
   const pressable = usePressFeedback();

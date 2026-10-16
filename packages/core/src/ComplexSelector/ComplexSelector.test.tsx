@@ -1466,4 +1466,34 @@ describe('ComplexSelector disabledMessage', () => {
       expect(tooltip).toHaveAttribute('popover-open');
     });
   });
+
+  it('warns in development that disabledMessage has no effect with renderTrigger', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      render(
+        <ComplexSelector
+          label="Assign"
+          value={null}
+          isDisabled
+          disabledMessage="You need the Editor role"
+          renderTrigger={props => (
+            <button type="button" {...props}>
+              Assign
+            </button>
+          )}>
+          {() => <button type="button">Apply</button>}
+        </ComplexSelector>,
+      );
+      expect(screen.queryByRole('tooltip', h)).not.toBeInTheDocument();
+      expect(
+        warn.mock.calls.some(([message]) =>
+          String(message).includes(
+            '`disabledMessage` has no effect with `renderTrigger`',
+          ),
+        ),
+      ).toBe(true);
+    } finally {
+      warn.mockRestore();
+    }
+  });
 });

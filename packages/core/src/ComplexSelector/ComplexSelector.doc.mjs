@@ -136,7 +136,7 @@ export const docs = {
           name: 'disabledMessage',
           type: 'string',
           description:
-            'Explains why the selector is disabled. With isDisabled, shows a tooltip on hover/keyboard focus and keeps the trigger focusable via aria-disabled (activation stays blocked). No effect with renderTrigger. Use this instead of wrapping a disabled ComplexSelector in Tooltip. Disabled controls swallow the hover events an external Tooltip needs.',
+            'Explains why the selector is disabled. With isDisabled, shows a tooltip on hover/keyboard focus and keeps the trigger focusable via aria-disabled (activation stays blocked; a caller onClick still runs). No effect with renderTrigger, which warns in development. Use this instead of wrapping a disabled ComplexSelector in Tooltip. Disabled controls swallow the hover events an external Tooltip needs.',
         },
         {
           name: 'isLoading',
@@ -218,7 +218,7 @@ export const docs = {
           name: 'onClick',
           type: '(event: MouseEvent) => void',
           description:
-            'Click handler on the trigger. Runs before the popup opens; call preventDefault() to keep it closed. A press elsewhere in the control box goes through the trigger too. With renderTrigger it runs after the built-in toggle and cannot cancel it.',
+            'Click handler on the trigger. Runs before the popup opens; call preventDefault() to keep it closed. A press elsewhere in the control box goes through the trigger too. While disabled with a disabledMessage the trigger stays focusable, so this still runs; opening stays blocked. With renderTrigger it runs after the built-in toggle and cannot cancel it.',
         },
         {
           name: 'onKeyDown',
