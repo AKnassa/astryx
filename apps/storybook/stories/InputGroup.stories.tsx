@@ -390,6 +390,48 @@ export const WithTokenizerOverflowEndControlsRTL: Story = {
   name: 'With Tokenizer Overflow End Controls (RTL)',
 };
 
+/**
+ * A disabled field has no remove buttons, so the overflowing strip is itself
+ * the keyboard stop; one that fits adds no stop. The first field's disabled
+ * reason keeps its input focusable, after the strip.
+ * Browser evidence: Tokenizer/__tests__/TokenizerGroupScroll.a11y.browser.spec.ts.
+ */
+export const WithTokenizerOverflowDisabled: Story = {
+  render: () => (
+    <div
+      style={{
+        display: 'flex',
+        flexDirection: 'column',
+        gap: '16px',
+        width: '320px',
+      }}>
+      <InputGroup label="Favorite fruits">
+        <InputGroupText>Tags</InputGroupText>
+        <Tokenizer
+          label="Selections"
+          isLabelHidden
+          searchSource={fruitSource}
+          value={fruits.slice(0, 6)}
+          onChange={() => {}}
+          isDisabled
+          disabledMessage="Selections are locked for review"
+        />
+      </InputGroup>
+      <InputGroup label="Favorite fruit">
+        <InputGroupText>Tags</InputGroupText>
+        <Tokenizer
+          label="Selection"
+          isLabelHidden
+          searchSource={fruitSource}
+          value={fruits.slice(0, 1)}
+          onChange={() => {}}
+          isDisabled
+        />
+      </InputGroup>
+    </div>
+  ),
+};
+
 export const WithNumberInput: Story = {
   render: args => {
     const [value, setValue] = useState<number | undefined>(undefined);

@@ -61,6 +61,16 @@ function politeRegion(): HTMLElement | null {
   return document.querySelector('[data-astryx-live-region="polite"]');
 }
 
+// A grouped row's token strip is a viewport of the shared scroll capability
+// (AST-025), which marks the element with the axis it scrolls on.
+function getTokenStrip(row: HTMLElement): HTMLElement {
+  const strip = row.querySelector<HTMLElement>('[data-scroll-axis="inline"]');
+  if (strip == null) {
+    throw new Error('The grouped row has no scrolling token strip');
+  }
+  return strip;
+}
+
 // Store original matches to restore later
 const originalMatches = HTMLElement.prototype.matches;
 
@@ -1686,12 +1696,13 @@ describe('Tokenizer', () => {
       const row = screen.getByRole('group', {name: 'People'});
       const input = screen.getByRole('combobox', {name: 'Recipients People'});
       const clearButton = screen.getByRole('button', {name: 'Clear all'});
-      const track = input.parentElement as HTMLElement;
+      const track = getTokenStrip(row);
 
       // Tokens and the input share one track inside the row: the part that
       // scrolls. jsdom has no layout, so the rendered half of this contract is
       // the play function of the WithTokenizerOverflowEndControls story.
       expect(track.parentElement).toBe(row);
+      expect(track).toContainElement(input);
       const tokens = row.querySelectorAll<HTMLElement>('.astryx-token');
       expect(tokens).toHaveLength(2);
       for (const token of tokens) {
@@ -1703,6 +1714,106 @@ describe('Tokenizer', () => {
       expect(row).toContainElement(clearButton);
       expect(track).not.toContainElement(clearButton);
       expect(track).not.toContainElement(screen.getByText('2 selected'));
+    });
+
+    it('leaves the keyboard path to the remove buttons when enabled in a group', () => {
+      render(
+        <InputGroup label="Recipients">
+          <InputGroupText>To</InputGroupText>
+          <Tokenizer
+            label="People"
+            isLabelHidden
+            searchSource={userSource}
+            value={[users[0], users[1]]}
+            onChange={() => {}}
+          />
+        </InputGroup>,
+      );
+
+      // Every token keeps a native remove button in the Tab order: entering the
+      // field lands on its input, and Shift+Tab walks back through the tokens,
+      // scrolling each into view. So the strip adds no stop of its own
+      // (AST-025 FR12: an existing focusable path reaches all the overflow).
+      const row = screen.getByRole('group', {name: 'People'});
+      const strip = getTokenStrip(row);
+      expect(strip).not.toHaveAttribute('role');
+      expect(strip).not.toHaveAttribute('aria-label');
+      expect(strip).not.toHaveAttribute('tabindex');
+      for (const label of ['Remove Alice', 'Remove Bob']) {
+        expect(strip).toContainElement(
+          screen.getByRole('button', {name: label}),
+        );
+      }
+    });
+
+    it('reveals the whole token when keyboard focus reaches its remove button in a group', async () => {
+      // jsdom has no scrollIntoView; record the calls instead.
+      const scrollIntoView = vi.fn();
+      Element.prototype.scrollIntoView = scrollIntoView;
+      try {
+        const user = userEvent.setup();
+        render(
+          <InputGroup label="Recipients">
+            <InputGroupText>To</InputGroupText>
+            <Tokenizer
+              label="People"
+              isLabelHidden
+              searchSource={userSource}
+              value={[users[0], users[1]]}
+              onChange={() => {}}
+            />
+          </InputGroup>,
+        );
+        act(() => {
+          screen.getByRole('combobox', {name: 'Recipients People'}).focus();
+        });
+        // The keyboard path to a token: back from the input.
+        await user.tab({shift: true});
+        const removeBob = screen.getByRole('button', {name: 'Remove Bob'});
+        expect(removeBob).toHaveFocus();
+
+        // Browsers scroll a focused control into view only as far as the
+        // control, which can leave the token's label cut off or under a fade.
+        // The scroll padding the token is revealed against is the fade width.
+        expect(scrollIntoView).toHaveBeenLastCalledWith({
+          block: 'nearest',
+          inline: 'nearest',
+        });
+        expect(scrollIntoView.mock.contexts.at(-1)).toBe(
+          removeBob.closest('.astryx-token'),
+        );
+      } finally {
+        delete (Element.prototype as Partial<Element>).scrollIntoView;
+      }
+    });
+
+    it('names the strip as the keyboard path when disabled in a group', () => {
+      render(
+        <InputGroup label="Recipients">
+          <InputGroupText>To</InputGroupText>
+          <Tokenizer
+            label="People"
+            isLabelHidden
+            searchSource={userSource}
+            value={[users[0], users[1]]}
+            onChange={() => {}}
+            isDisabled
+          />
+        </InputGroup>,
+      );
+
+      // A disabled field has no remove buttons and no focusable input, so the
+      // strip itself is how a keyboard reaches tokens scrolled out of view.
+      expect(screen.queryAllByRole('button', {name: /^Remove /})).toHaveLength(
+        0,
+      );
+      const strip = screen.getByRole('group', {name: 'Selected items'});
+      expect(strip).toBe(
+        getTokenStrip(screen.getByRole('group', {name: 'People'})),
+      );
+      // It joins the Tab order only while it overflows. jsdom has no layout, so
+      // that half is browser evidence: TokenizerGroupScroll.a11y.browser.spec.ts.
+      expect(strip).not.toHaveAttribute('tabindex');
     });
 
     it('keeps tokens and the input as direct children of the field outside a group', () => {

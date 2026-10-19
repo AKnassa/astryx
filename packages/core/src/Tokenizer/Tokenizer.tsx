@@ -10,13 +10,18 @@
  *   handleRef. Inside an InputGroup it takes the group's size and drops its
  *   own Field chrome, local description/status, and border radius so the
  *   group provides the shared border, and it keeps its tokens on one
- *   scrolling row beside its end controls.
+ *   scrolling strip beside its end controls. The strip adopts the shared
+ *   scroll capability (spec:AST-025): edge fades show hidden tokens, forced
+ *   colors restore the native scrollbar, and a disabled strip is its own
+ *   keyboard stop while it overflows.
  *
  * SYNC: When modified, update:
  * - /packages/core/src/Tokenizer/index.ts
  * - /apps/storybook/stories/Tokenizer.stories.tsx
  * - /apps/storybook/stories/InputGroup.stories.tsx (WithTokenizer,
- *   WithTokenizerOverflow, WithTokenizerOverflowEndControls)
+ *   WithTokenizerOverflow, WithTokenizerOverflowEndControls,
+ *   WithTokenizerOverflowDisabled)
+ * - /packages/core/src/Tokenizer/__tests__/TokenizerGroupScroll.a11y.browser.spec.ts
  * - /packages/core/src/InputGroup/InputGroup.doc.mjs (compatible controls)
  * - /packages/cli/assets/templates/blocks/components/Tokenizer/ (showcase blocks)
  */
@@ -29,6 +34,7 @@ import React, {
   useRef,
   useState,
   type ReactNode,
+  type Ref,
 } from 'react';
 import * as stylex from '@stylexjs/stylex';
 import {
@@ -43,6 +49,11 @@ import {
   useFieldInputStyling,
 } from '../Field/fieldParts';
 import {useMergedRefs} from '../hooks/useMergedRefs';
+import {
+  useScrollableArea,
+  type ScrollAxisState,
+  type UseScrollableAreaResult,
+} from '../hooks/useScrollableArea';
 import type {SizeValue} from '../utils/types';
 import {BaseTypeahead} from '../Typeahead/BaseTypeahead';
 import {useSize} from '../SizeContext/SizeContext';
@@ -282,6 +293,15 @@ export interface TokenizerProps<T extends SearchableItem> extends Omit<
 // because the input's reserve is derived from the same value.
 const END_LANE_INSET = spacingVars['--spacing-2'];
 const TOKEN_ROW_INSET = `calc(${spacingVars['--spacing-1']} - 1px)`;
+/**
+ * Where a grouped strip's edge fade turns opaque, and how far focus scrolling
+ * keeps a focused control from a faded edge. The fade is transparent across
+ * the strip's focus-ring bleed, so a faded edge never paints into the row
+ * padding.
+ */
+const TRACK_FADE_INSET = `calc(${TOKEN_ROW_INSET} + ${spacingVars['--spacing-6']})`;
+const TRACK_FADE_FROM_LEFT = `linear-gradient(to right, transparent ${TOKEN_ROW_INSET}, black ${TRACK_FADE_INSET})`;
+const TRACK_FADE_FROM_RIGHT = `linear-gradient(to left, transparent ${TOKEN_ROW_INSET}, black ${TRACK_FADE_INSET})`;
 // InputClearButton grows 2px past its visible box under `(pointer: coarse)`.
 // Keep this maximum reserve in sync with Field/InputClearButton.tsx.
 const INPUT_CLEAR_COARSE_POINTER_OUTSET = '2px';
@@ -400,21 +420,67 @@ const styles = stylex.create({
     // The grouped row keeps to one line by scrolling, and only this track
     // scrolls. The end lane is its sibling, so tokens are clipped beside the
     // end controls instead of painting under them, and the controls hold the
-    // row's inline end while the tokens move.
+    // row's inline end while the tokens move. useScrollableArea owns the
+    // overflow declarations.
     display: 'flex',
     alignItems: 'center',
     alignSelf: 'stretch',
-    gap: spacingVars['--spacing-1'],
     flex: '1 1 0',
     minWidth: 0,
     // A scroll container clips at its own padding edge. Bleed back out to the
     // row's, so a token's focus ring keeps the room the row padding gives it.
     margin: `calc(-1 * ${TOKEN_ROW_INSET})`,
     padding: TOKEN_ROW_INSET,
-    overflowX: 'auto',
-    // A horizontal scrollbar inside a 32px-tall control would eat the row;
-    // the row stays reachable by wheel, drag, and focus-driven scrolling.
-    scrollbarWidth: 'none',
+    // A native scrollbar would take most of a 28-32px row. The edge fades
+    // show what is out of view instead, and the keyboard reaches it through
+    // the remove buttons or, when disabled, through the track itself. Forced
+    // colors restore the platform scrollbar (AST-025 FR12, FR16).
+    scrollbarWidth: {
+      default: 'none',
+      '@media (forced-colors: active)': 'auto',
+    },
+    scrollPaddingInline: TRACK_FADE_INSET,
+  },
+  inGroupTrackContent: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: spacingVars['--spacing-1'],
+    flex: 'none',
+    // At least the track's width, so the input can take what the tokens
+    // leave; wider once they overflow, which is the range the track scrolls.
+    minWidth: '100%',
+  },
+  inGroupTrackContentTruncated: {
+    // The "+N more" summary measures this box, so it holds the track's width.
+    width: '100%',
+  },
+  // Each fade masks an edge that hides tokens. Forced colors drop the fades,
+  // since the native scrollbar is back there.
+  trackFadeStart: {
+    maskImage: {
+      default: TRACK_FADE_FROM_LEFT,
+      ':is([dir="rtl"] *)': {
+        default: TRACK_FADE_FROM_RIGHT,
+        '@media (forced-colors: active)': 'none',
+      },
+      '@media (forced-colors: active)': 'none',
+    },
+  },
+  trackFadeEnd: {
+    maskImage: {
+      default: TRACK_FADE_FROM_RIGHT,
+      ':is([dir="rtl"] *)': {
+        default: TRACK_FADE_FROM_LEFT,
+        '@media (forced-colors: active)': 'none',
+      },
+      '@media (forced-colors: active)': 'none',
+    },
+  },
+  trackFadeBoth: {
+    maskImage: {
+      default: `linear-gradient(to right, transparent ${TOKEN_ROW_INSET}, black ${TRACK_FADE_INSET}, black calc(100% - ${TRACK_FADE_INSET}), transparent calc(100% - ${TOKEN_ROW_INSET}))`,
+      '@media (forced-colors: active)': 'none',
+    },
   },
   inGroupInput: {
     // Always in flow after the last token. The empty-query hit surface of
@@ -604,22 +670,78 @@ function EndLane({
   );
 }
 
+function trackFade(inline: ScrollAxisState) {
+  if (!inline.isScrollable) {
+    return null;
+  }
+  if (!inline.atStart && !inline.atEnd) {
+    return styles.trackFadeBoth;
+  }
+  if (!inline.atStart) {
+    return styles.trackFadeStart;
+  }
+  return inline.atEnd ? null : styles.trackFadeEnd;
+}
+
 /**
- * The start icon, tokens, and input. In a grouped row they scroll together as
- * one track beside the end lane; in a wrapping field they stay direct children
- * of the wrapper.
+ * Keyboard focus in a grouped track brings the whole item it lands in into
+ * view, clear of the fades: the track's scroll padding is the fade width.
+ * Browsers scroll only as far as the focused control, which can leave a
+ * token's label cut off or faded beside its remove button. Pointer focus is
+ * left alone, so a press never moves its target before the release.
+ */
+function revealFocusedItem(event: React.FocusEvent<HTMLElement>): void {
+  if (
+    !(event.target instanceof Element) ||
+    !event.target.matches(':focus-visible')
+  ) {
+    return;
+  }
+  const content = event.currentTarget.firstElementChild;
+  let item: Element | null = event.target;
+  while (item != null && item.parentElement !== content) {
+    item = item.parentElement;
+  }
+  item?.scrollIntoView?.({block: 'nearest', inline: 'nearest'});
+}
+
+/**
+ * The start icon, tokens, and input. In a grouped row they scroll together in
+ * one track beside the end lane: the viewport of the shared scroll capability,
+ * around a content box it measures. In a wrapping field (`scrollArea` null)
+ * they stay direct children of the wrapper.
  */
 function TokenTrack({
-  isScrolling,
+  scrollArea,
+  trackRef,
+  isTruncated,
   children,
 }: {
-  isScrolling: boolean;
+  scrollArea: UseScrollableAreaResult | null;
+  trackRef: Ref<HTMLDivElement>;
+  isTruncated: boolean;
   children: ReactNode;
 }): ReactNode {
-  return isScrolling ? (
-    <div {...stylex.props(styles.inGroupTrack)}>{children}</div>
-  ) : (
-    children
+  if (scrollArea == null) {
+    return children;
+  }
+  return (
+    <div
+      {...scrollArea.getViewportProps<HTMLDivElement>({
+        ref: trackRef,
+        onFocus: revealFocusedItem,
+        xstyle: [styles.inGroupTrack, trackFade(scrollArea.state.inline)],
+      })}>
+      <div
+        {...scrollArea.getContentProps<HTMLDivElement>(
+          stylex.props(
+            styles.inGroupTrackContent,
+            isTruncated && styles.inGroupTrackContentTruncated,
+          ),
+        )}>
+        {children}
+      </div>
+    </div>
   );
 }
 
@@ -689,6 +811,24 @@ export function Tokenizer<T extends SearchableItem>({
   const statusMessageId = useId();
   const inputRef = useRef<HTMLInputElement>(null);
   const wrapperRef = useRef<HTMLDivElement>(null);
+  const trackRef = useRef<HTMLDivElement>(null);
+
+  // A grouped row scrolls its tokens in a track that adopts the shared scroll
+  // capability (AST-025), which measures the overflow and reports the edges
+  // that hide tokens. Enabled tokens keep the keyboard path: each has a native
+  // remove button, reached with Shift+Tab from the input, and keyboard focus
+  // on one brings its token into view (revealFocusedItem). A disabled field
+  // has none, so the track itself is the stop while it overflows.
+  const scrollArea = useScrollableArea({
+    axis: 'inline',
+    keyboardAccess: isDisabled
+      ? {
+          owner: 'viewport',
+          role: 'group',
+          label: t('@astryx.tokenizer.selectedItems'),
+        }
+      : {owner: 'content'},
+  });
 
   // Disabled-reason tooltip. Disabled controls swallow pointer events, so the
   // tooltip listeners attach to the input wrapper and the typeahead input stays
@@ -783,8 +923,9 @@ export function Tokenizer<T extends SearchableItem>({
       if (comingFromOutside) {
         onFocus?.(e);
         // Redirect to the input so the user doesn't have to tab through
-        // every token remove button.
-        if (e.target !== inputRef.current) {
+        // every token remove button. A disabled grouped track that takes
+        // focus keeps it: it is the keyboard path to its hidden tokens.
+        if (e.target !== inputRef.current && e.target !== trackRef.current) {
           inputRef.current?.focus();
         }
       }
@@ -1075,7 +1216,10 @@ export function Tokenizer<T extends SearchableItem>({
         controlStyle,
       )}>
       {inputGroup && <VisuallyHidden id={inputLabelId}>{label}</VisuallyHidden>}
-      <TokenTrack isScrolling={isInGroupRow}>
+      <TokenTrack
+        scrollArea={isInGroupRow ? scrollArea : null}
+        trackRef={trackRef}
+        isTruncated={isTruncated}>
         {startIcon && (
           <span
             {...stylex.props(value.length > 0 && styles.startIconWithTokens)}>
