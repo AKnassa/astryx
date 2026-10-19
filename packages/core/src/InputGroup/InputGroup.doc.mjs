@@ -30,7 +30,7 @@ export const docs = {
       name: 'children',
       type: 'ReactNode',
       description:
-        'InputGroupText and compatible input children: TextInput, NumberInput, TimeInput, DateInput, Typeahead, Tokenizer, Selector, or MultiSelector.',
+        'InputGroupText, Button addons, and compatible input children: TextInput, NumberInput, TimeInput, DateInput, Typeahead, Tokenizer, Selector, or MultiSelector.',
       required: true,
     },
     {
@@ -113,6 +113,11 @@ export const docs = {
       {
         guidance: true,
         description:
+          'Use Button for an action attached to the input; InputGroup connects its corners automatically.',
+      },
+      {
+        guidance: true,
+        description:
           'Use InputGroup with compatible single-line inputs: TextInput, NumberInput, TimeInput, DateInput, Typeahead, Tokenizer, Selector, and MultiSelector.',
       },
       {
@@ -185,6 +190,11 @@ export const docsDense = {
         guidance: true,
         description:
           'Use InputGroupText for static prefixes/suffixes like "$", "kg", or "https://".',
+      },
+      {
+        guidance: true,
+        description:
+          'Use Button for an action attached to the input; InputGroup connects its corners automatically.',
       },
       {
         guidance: true,
