@@ -8,6 +8,10 @@
  * @output Exports Tooltip component for hover/focus triggered tooltips
  * @position Layer component; uses display:contents wrapper to avoid cloneElement
  *
+ * With `anchorRef` and no children (sibling mode) it binds an external anchor
+ * instead, including one rendered around or after it, whose ref React
+ * attaches only after the tooltip's own layout effects have run.
+ *
  * SYNC: When modified, update these files to stay in sync:
  * - /packages/core/src/Tooltip/index.ts
  * - /apps/storybook/stories/Tooltip.stories.tsx
@@ -16,6 +20,7 @@
 
 import React, {
   useCallback,
+  useEffect,
   useRef,
   type ReactElement,
   type ReactNode,
@@ -236,36 +241,60 @@ export function Tooltip({
     onHide: handleHide,
   });
 
-  // Sibling mode: attach to external anchorRef
+  // Sibling mode: attach to external anchorRef.
+  //
+  // React attaches an element's ref only after the layout effects of
+  // everything rendered inside it and of the siblings before it. A tooltip
+  // rendered inside its own anchor, as a collapsed SideNavItem's rail tooltip
+  // is, therefore finds `anchorRef.current` still null in the layout effect.
+  // The passive effect binds that anchor instead: it runs once the commit has
+  // attached every ref, in the same task as any show the tooltip makes on
+  // mount, so the tooltip is anchored from its first frame. Only one of the
+  // two effects holds the binding at a time, and each releases only its own.
+  const isAnchorBoundRef = useRef(false);
+  const {ref: tooltipRef, describedBy: tooltipDescribedBy} = tooltip;
+
+  const bindAnchor = useCallback(
+    (el: HTMLElement) => {
+      // Use combined ref for position + interaction
+      tooltipRef(el);
+      isAnchorBoundRef.current = true;
+
+      // Set aria-describedby, merging with existing
+      const existingDescribedBy = el.getAttribute('aria-describedby');
+      el.setAttribute(
+        'aria-describedby',
+        mergeIds(existingDescribedBy, tooltipDescribedBy) ?? '',
+      );
+
+      return () => {
+        isAnchorBoundRef.current = false;
+        tooltipRef(null);
+        if (existingDescribedBy) {
+          el.setAttribute('aria-describedby', existingDescribedBy);
+        } else {
+          el.removeAttribute('aria-describedby');
+        }
+      };
+    },
+    [tooltipRef, tooltipDescribedBy],
+  );
+
   useIsomorphicLayoutEffect(() => {
-    if (!anchorRef) {
+    const el = anchorRef?.current;
+    if (!el || isAnchorBoundRef.current) {
       return;
     }
+    return bindAnchor(el);
+  }, [anchorRef, bindAnchor]);
 
-    const el = anchorRef.current;
-    if (!el) {
+  useEffect(() => {
+    const el = anchorRef?.current;
+    if (!el || isAnchorBoundRef.current) {
       return;
     }
-
-    // Use combined ref for position + interaction
-    tooltip.ref(el);
-
-    // Set aria-describedby, merging with existing
-    const existingDescribedBy = el.getAttribute('aria-describedby');
-    el.setAttribute(
-      'aria-describedby',
-      mergeIds(existingDescribedBy, tooltip.describedBy) ?? '',
-    );
-
-    return () => {
-      tooltip.ref(null);
-      if (existingDescribedBy) {
-        el.setAttribute('aria-describedby', existingDescribedBy);
-      } else {
-        el.removeAttribute('aria-describedby');
-      }
-    };
-  }, [anchorRef, tooltip.ref, tooltip.describedBy]);
+    return bindAnchor(el);
+  }, [anchorRef, bindAnchor]);
 
   // For element children with display:contents, attach ref to first child
   useIsomorphicLayoutEffect(() => {

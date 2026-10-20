@@ -25,6 +25,7 @@ import {
   fireEvent,
   waitFor,
 } from '@testing-library/react';
+import {StrictMode, useEffect, useRef, type RefObject} from 'react';
 import {Tooltip} from './Tooltip';
 import {useTooltip} from './useTooltip';
 import {__resetInteractionModalityForTest} from '../utils/interactionModality';
@@ -211,6 +212,161 @@ describe('Tooltip', () => {
       expect(screen.getByTestId('icon').getAttribute('aria-describedby')).toBe(
         screen.getByRole('tooltip', {hidden: true}).id,
       );
+    });
+  });
+
+  describe('anchorRef (sibling mode)', () => {
+    // React attaches an element's ref only after the layout effects of
+    // everything rendered inside it and of the siblings before it, so a
+    // tooltip inside or ahead of the element it anchors to finds
+    // `anchorRef.current` still null when it first binds. A collapsed
+    // SideNavItem renders its rail tooltip inside its row. (#7692)
+    function AnchoredTooltip({
+      anchorPlacement,
+      anchorDescribedBy,
+      hasTooltip = true,
+      onOpenChange,
+    }: {
+      anchorPlacement: 'before' | 'around' | 'after';
+      anchorDescribedBy?: string;
+      hasTooltip?: boolean;
+      onOpenChange?: (isOpen: boolean) => void;
+    }) {
+      const anchorRef = useRef<HTMLDivElement>(null);
+      const tooltip = hasTooltip && (
+        <Tooltip
+          anchorRef={anchorRef}
+          content="Tooltip text"
+          delay={0}
+          onOpenChange={onOpenChange}
+        />
+      );
+      return (
+        <>
+          {anchorPlacement === 'after' && tooltip}
+          <div
+            ref={anchorRef}
+            data-testid="anchor"
+            aria-describedby={anchorDescribedBy}>
+            {anchorPlacement === 'around' && tooltip}
+          </div>
+          {anchorPlacement === 'before' && tooltip}
+        </>
+      );
+    }
+
+    it.each(['before', 'around', 'after'] as const)(
+      'binds to an anchor rendered %s it',
+      async anchorPlacement => {
+        const onOpenChange = vi.fn();
+        render(
+          <AnchoredTooltip
+            anchorPlacement={anchorPlacement}
+            onOpenChange={onOpenChange}
+          />,
+        );
+
+        const anchor = screen.getByTestId('anchor');
+        expect(anchor.getAttribute('aria-describedby')).toBe(
+          screen.getByRole('tooltip', {hidden: true}).id,
+        );
+
+        fireEvent.mouseEnter(anchor);
+        await waitFor(() => {
+          expect(onOpenChange).toHaveBeenCalledWith(true);
+        });
+      },
+    );
+
+    it('binds an anchor around it once through StrictMode replay, and unbinds on unmount', () => {
+      const {rerender} = render(
+        <StrictMode>
+          <AnchoredTooltip anchorPlacement="around" />
+        </StrictMode>,
+      );
+
+      const anchor = screen.getByTestId('anchor');
+      expect(anchor.getAttribute('aria-describedby')).toBe(
+        screen.getByRole('tooltip', {hidden: true}).id,
+      );
+
+      rerender(
+        <StrictMode>
+          <AnchoredTooltip anchorPlacement="around" hasTooltip={false} />
+        </StrictMode>,
+      );
+      expect(anchor).not.toHaveAttribute('aria-describedby');
+    });
+
+    it("keeps an anchor's own description, and restores it on unmount", () => {
+      const {rerender} = render(
+        <AnchoredTooltip anchorPlacement="around" anchorDescribedBy="hint" />,
+      );
+
+      const anchor = screen.getByTestId('anchor');
+      expect(anchor.getAttribute('aria-describedby')).toBe(
+        `hint ${screen.getByRole('tooltip', {hidden: true}).id}`,
+      );
+
+      rerender(
+        <AnchoredTooltip
+          anchorPlacement="around"
+          anchorDescribedBy="hint"
+          hasTooltip={false}
+        />,
+      );
+      expect(anchor.getAttribute('aria-describedby')).toBe('hint');
+    });
+
+    it('anchors a tooltip open on mount within the commit that shows it', () => {
+      // A tooltip open on mount shows from its passive effects. Binding an
+      // anchor around it in a later commit would leave that show unanchored,
+      // and the browser may paint in between. The probe's effect runs after
+      // the tooltip's, so it reads what that first frame gets.
+      const seen: {anchorNames: string[]; describedBy: string | null}[] = [];
+      function Probe({
+        anchorRef,
+      }: {
+        anchorRef: RefObject<HTMLDivElement | null>;
+      }) {
+        useEffect(() => {
+          const anchor = anchorRef.current!;
+          const style = anchor.style as unknown as {anchorName?: string};
+          seen.push({
+            anchorNames: (style.anchorName ?? '').split(',').map(s => s.trim()),
+            describedBy: anchor.getAttribute('aria-describedby'),
+          });
+        }, [anchorRef]);
+        return null;
+      }
+      function OpenOnMount() {
+        const anchorRef = useRef<HTMLDivElement>(null);
+        return (
+          <div ref={anchorRef}>
+            <Tooltip
+              anchorRef={anchorRef}
+              content="Tooltip text"
+              isDefaultOpen
+            />
+            <Probe anchorRef={anchorRef} />
+          </div>
+        );
+      }
+      render(<OpenOnMount />);
+
+      const layer = screen.getByRole('tooltip', {hidden: true});
+      expect(layer.matches(':popover-open')).toBe(true);
+      const anchorId = layer.style.positionAnchor;
+      expect(anchorId).not.toBe('');
+      expect(seen[0]?.anchorNames).toContain(anchorId);
+      expect(seen[0]?.describedBy).toBe(layer.id);
+    });
+
+    it('leaves an anchor that never attaches unbound', () => {
+      render(<Tooltip anchorRef={{current: null}} content="Tooltip text" />);
+
+      expect(screen.getByRole('tooltip', {hidden: true})).toBeInTheDocument();
+      expect(document.querySelector('[aria-describedby]')).toBeNull();
     });
   });
 

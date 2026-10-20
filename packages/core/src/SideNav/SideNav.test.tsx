@@ -11,6 +11,7 @@
 
 import React from 'react';
 import {describe, it, expect, vi, beforeEach, afterEach} from 'vitest';
+import type {MockInstance} from 'vitest';
 import {
   render,
   screen,
@@ -1331,6 +1332,126 @@ describe('SideNavItem (collapsed)', () => {
     const link = screen.getByRole('link');
     expect(link).toHaveAttribute('href', '/dashboard');
     expect(link).toHaveAttribute('aria-label', 'Dashboard');
+  });
+
+  // A nav restored collapsed (persisted state, a controlled default) mounts
+  // its items collapsed. Their rail tooltip must come out wired the same as
+  // one whose nav collapsed after mounting. (#7692)
+  describe('rail tooltip', () => {
+    let showPopover: MockInstance<HTMLElement['showPopover']>;
+    beforeEach(() => {
+      showPopover = vi.spyOn(HTMLElement.prototype, 'showPopover');
+    });
+    afterEach(() => {
+      showPopover.mockRestore();
+    });
+
+    // One icon item in a controlled nav. With no collapse button, the item's
+    // rail tooltip is the only tooltip on the page.
+    const railNav = ({isCollapsed = true, isDisabled = false} = {}) => (
+      <SideNav
+        collapsible={{
+          isCollapsed,
+          onCollapsedChange: () => {},
+          hasButton: false,
+        }}>
+        <SideNavItem
+          label="Dashboard"
+          icon={StubIcon}
+          href="/dashboard"
+          isDisabled={isDisabled}
+        />
+      </SideNav>
+    );
+
+    it.each([
+      ['mounts collapsed', true],
+      ['collapses after mounting', false],
+    ])('opens on hover when the nav %s', async (_, startsCollapsed) => {
+      const user = userEvent.setup();
+      const {rerender} = render(railNav({isCollapsed: startsCollapsed}));
+      if (!startsCollapsed) {
+        rerender(railNav());
+      }
+
+      const link = screen.getByRole('link', {name: 'Dashboard'});
+      const tooltip = screen.getByRole('tooltip', {hidden: true});
+      expect(tooltip).toHaveTextContent('Dashboard');
+      // The tooltip binds to the row around the link, so the hover target
+      // stays on a disabled item, whose control takes no pointer events.
+      expect(link.parentElement).toHaveAttribute(
+        'aria-describedby',
+        tooltip.id,
+      );
+
+      await user.hover(link);
+      await waitFor(() => {
+        expect(showPopover.mock.contexts).toContain(tooltip);
+      });
+    });
+
+    it('opens over the row of a disabled item mounted collapsed', async () => {
+      const user = userEvent.setup();
+      render(railNav({isDisabled: true}));
+
+      // A disabled control takes no pointer events, so the pointer lands on
+      // the row around it: the element the tooltip binds to.
+      const row = screen.getByRole('button', {
+        name: 'Dashboard',
+      }).parentElement!;
+      const tooltip = screen.getByRole('tooltip', {hidden: true});
+      expect(row).toHaveAttribute('aria-describedby', tooltip.id);
+
+      await user.hover(row);
+      await waitFor(() => {
+        expect(showPopover.mock.contexts).toContain(tooltip);
+      });
+    });
+
+    it('stays on the row when disabling swaps the link for a button', async () => {
+      const user = userEvent.setup();
+      const {rerender} = render(railNav());
+      const row = screen.getByRole('link', {name: 'Dashboard'}).parentElement!;
+
+      rerender(railNav({isDisabled: true}));
+      expect(
+        screen.getByRole('button', {name: 'Dashboard'}).parentElement,
+      ).toBe(row);
+      const tooltip = screen.getByRole('tooltip', {hidden: true});
+      expect(row).toHaveAttribute('aria-describedby', tooltip.id);
+
+      await user.hover(row);
+      await waitFor(() => {
+        expect(showPopover.mock.contexts).toContain(tooltip);
+      });
+    });
+
+    it('leaves the expanded row undescribed, and opens again once collapsed', async () => {
+      const user = userEvent.setup();
+      const {rerender} = render(railNav());
+      const row = screen.getByRole('link', {name: 'Dashboard'}).parentElement!;
+      expect(row).toHaveAttribute(
+        'aria-describedby',
+        screen.getByRole('tooltip', {hidden: true}).id,
+      );
+
+      // Expanded, the same row shows its label and carries no tooltip.
+      rerender(railNav({isCollapsed: false}));
+      expect(screen.getByRole('link', {name: 'Dashboard'}).parentElement).toBe(
+        row,
+      );
+      expect(row).not.toHaveAttribute('aria-describedby');
+      expect(screen.queryByRole('tooltip', {hidden: true})).toBeNull();
+
+      rerender(railNav());
+      const tooltip = screen.getByRole('tooltip', {hidden: true});
+      expect(row).toHaveAttribute('aria-describedby', tooltip.id);
+
+      await user.hover(screen.getByRole('link', {name: 'Dashboard'}));
+      await waitFor(() => {
+        expect(showPopover.mock.contexts).toContain(tooltip);
+      });
+    });
   });
 
   it('renders popover trigger when collapsed with icon and children', () => {
